@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#1a1815" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Low Poly Creator</title>
+    <meta
+      name="description"
+      content="顔写真からPS1風のローポリゴン3Dキャラクターを生成、.glbとして書き出すブラウザアプリ"
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1817'/%3E%3Cpath d='M16 7l8 6-3 10h-10l-3-10z' fill='none' stroke='%23d9a441' stroke-width='2' stroke-linejoin='round'/%3E%3Cpath d='M16 7v16M8 13h16' stroke='%23d9a441' stroke-width='1' opacity='.5'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="./tokens.css" />
+    <link rel="stylesheet" href="./styles.css" />
+
+    <!--
+      importmap: ブラウザ標準のモジュール解決。バンドラを使わずESモジュールを読む。
+      ソース側は必ずベアインポート（'three' など）で書き、URLはここに集約する。
+      Viteへ移行する場合はこのブロックを削除するだけでよい。
+
+      three.js は vendor/ に取り込んである（2.2MB）。CDN側のバージョン差異で
+      壊れるのを避けるため。更新は vendor/update.sh で行う。
+      MediaPipeはWASMが11.5MBあり、リポジトリに入れると重すぎるためCDNのまま。
+      バージョンは固定してある。
+    -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "./vendor/three/three.module.js",
+          "three/addons/": "./vendor/three/addons/",
+          "mediapipe-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/vision_bundle.mjs"
+        }
+      }
+    </script>
+  </head>
+
+  <body>
+    <div class="app">
+      <main class="stage">
+        <canvas id="viewport"></canvas>
+        <p class="stage__hint">ドラッグで回転 / ホイールで拡大縮小</p>
+      </main>
+
+      <aside class="panel">
+        <header class="panel__head">
+          <h1 class="panel__title">Low Poly Creator</h1>
+          <p class="panel__lede">
+            画像を貼ってPS1風のキャラクターを作り、Blender用の <code>.glb</code> として書き出します。
+            画像は端末の外に出ません。
+          </p>
+        </header>
+
+        <!-- 画像を最初に置く。顔も服も同じ「枠に貼る」操作に統一してある -->
+        <section class="section">
+          <h2 class="section__title">画像</h2>
+          <ul class="slots" id="slot-list"></ul>
+          <p class="note" id="slot-note">枠を選ぶか、画像をここへ落としてください。</p>
+          <input type="file" id="slot-input" accept="image/*" hidden />
+        </section>
+
+        <section class="section">
+          <h2 class="section__title">キャラクター</h2>
+          <div class="section__body">
+            <div class="group">
+              <h3 class="group__title">体型</h3>
+              <ul class="chips" id="body-list" role="radiogroup" aria-label="体型"></ul>
+            </div>
+            <div class="group">
+              <h3 class="group__title">服（上）</h3>
+              <ul class="chips" id="top-list" role="radiogroup" aria-label="上半身の服"></ul>
+            </div>
+            <div class="group">
+              <h3 class="group__title">服（下）</h3>
+              <ul class="chips" id="bottom-list" role="radiogroup" aria-label="下半身の服"></ul>
+            </div>
+            <div class="group">
+              <h3 class="group__title">ポーズ</h3>
+              <ul class="chips" id="pose-list" role="radiogroup" aria-label="ポーズ"></ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2 class="section__title">見た目</h2>
+          <div class="section__body">
+            <div class="group">
+              <h3 class="group__title">背景</h3>
+              <ul class="chips" id="backdrop-list" role="radiogroup" aria-label="背景"></ul>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="look-jitter" checked />
+              <span class="switch__label">頂点ジッター</span>
+            </label>
+            <label class="switch">
+              <input type="checkbox" id="look-affine" checked />
+              <span class="switch__label">テクスチャの歪み</span>
+            </label>
+            <label class="switch">
+              <input type="checkbox" id="look-unlit" checked />
+              <span class="switch__label">ライティングなし</span>
+            </label>
+            <label class="field">
+              <span class="field__label">メッシュの細かさ</span>
+              <select class="select" id="look-detail">
+                <option value="low">粗い</option>
+                <option value="normal" selected>標準</option>
+                <option value="high">細かい</option>
+                <option value="ultra">とても細かい</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field__label">テクスチャ解像度</span>
+              <select class="select" id="look-texture">
+                <option value="1" selected>256px</option>
+                <option value="2">512px</option>
+                <option value="4">1024px</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field__label">描画解像度</span>
+              <select class="select" id="look-scale">
+                <option value="0.25">1/4</option>
+                <option value="0.5" selected>1/2</option>
+                <option value="1">等倍</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2 class="section__title">書き出し</h2>
+          <div class="section__body">
+            <div class="actions">
+              <button class="button button--primary" id="export-glb" type="button">
+                .glb を書き出す
+              </button>
+              <button class="button" id="export-png" type="button">.png</button>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="png-transparent" checked />
+              <span class="switch__label">PNGの背景を透過する</span>
+            </label>
+          </div>
+        </section>
+
+        <footer class="panel__foot">
+          <p class="status" id="status" role="status">読み込み中</p>
+        </footer>
+      </aside>
+    </div>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

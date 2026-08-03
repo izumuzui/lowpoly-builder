@@ -1,0 +1,547 @@
+/* Hallmark · pre-emit critique: P5 H5 E5 S4 R5 V4
+ * scope: アプリの操作パネル（ページではないため macrostructure / nav / footer は選定なし）
+ * tokens: 既存の tokens.css を継承。配色・タイポ・余白は変更していない
+ * states: default · hover · focus-visible · active · disabled · selected · dragover · empty
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  /* 横スクロールは常に禁止。clip を使う（hidden はスクロール文脈を作る） */
+  overflow-x: clip;
+}
+
+body {
+  background: var(--surface-stage);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--ink-dim);
+}
+
+:where(a, button, input, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- レイアウト ---------- */
+
+.app {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  height: 100dvh;
+}
+
+.stage {
+  position: relative;
+  min-width: 0;
+  background: var(--surface-stage);
+  overflow: hidden;
+}
+
+#viewport {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+/* 低解像度で描いたときは補間せず引き伸ばす */
+#viewport[data-pixelated='true'] {
+  image-rendering: pixelated;
+}
+
+.stage__hint {
+  position: absolute;
+  left: calc(var(--space-md) + var(--safe-left));
+  bottom: calc(var(--space-md) + var(--safe-bottom));
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* パネルは面の色差と1本の罫線だけで分ける */
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: calc(var(--space-lg) + var(--safe-top)) var(--space-md)
+    calc(var(--space-md) + var(--safe-bottom));
+  padding-right: calc(var(--space-md) + var(--safe-right));
+  background: var(--surface-panel);
+  border-left: 1px solid var(--rule);
+}
+
+.panel__head {
+  padding-bottom: var(--space-md);
+}
+
+.panel__title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.panel__lede {
+  margin: var(--space-xs) 0 0;
+  font-size: var(--text-sm);
+  color: var(--ink-dim);
+}
+
+.panel__foot {
+  margin-top: auto;
+  padding-top: var(--space-md);
+}
+
+/* ---------- セクション ---------- */
+
+.section {
+  padding: var(--space-md) 0;
+  border-top: 1px solid var(--rule-soft);
+}
+
+.section__title {
+  margin: 0 0 var(--space-sm);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.section__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.group__title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--ink-dim);
+}
+
+.note {
+  margin: var(--space-sm) 0 0;
+  font-size: var(--text-sm);
+  color: var(--ink-faint);
+}
+
+.status {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.status[data-tone='error'] {
+  color: var(--danger);
+}
+
+/* ---------- 画像スロット ---------- */
+
+.slots {
+  display: grid;
+  /* 画像を含むトラックは minmax(0, 1fr)。min() で最小幅を超えたら1列に落ちる。
+     132pxなら320px幅の端末でも2列を保てる */
+  grid-template-columns: repeat(auto-fit, minmax(min(132px, 100%), 1fr));
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.slot {
+  position: relative;
+  min-width: 0;
+}
+
+.slot__pick {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  min-height: var(--tap-min);
+  padding: var(--space-xs);
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  background: var(--surface-sunken);
+  border: 1px solid transparent;
+  border-radius: var(--radius-section);
+  cursor: pointer;
+  transition:
+    background var(--dur-micro) var(--ease-out),
+    border-color var(--dur-micro) var(--ease-out);
+}
+
+.slot__pick:hover {
+  background: var(--surface-raised);
+}
+
+.slot__pick:active {
+  background: var(--surface-raised-hover);
+}
+
+.slot[data-filled='true'] .slot__pick {
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-raised);
+}
+
+.slot[data-dragover='true'] .slot__pick {
+  border-color: var(--accent-dim);
+  background: var(--accent-wash);
+}
+
+.slot__preview {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  background: var(--surface-stage);
+  border-radius: var(--radius-control);
+  /* テクスチャの粗さをそのまま見せる */
+  image-rendering: pixelated;
+}
+
+.slot__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.slot__label {
+  font-size: var(--text-sm);
+  line-height: 1.3;
+}
+
+.slot__state {
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.slot__clear {
+  position: absolute;
+  top: var(--space-2xs);
+  right: var(--space-2xs);
+  display: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font: inherit;
+  font-size: var(--text-xs);
+  line-height: 1;
+  color: var(--ink-dim);
+  background: var(--surface-panel);
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.slot[data-filled='true'] .slot__clear {
+  display: grid;
+}
+
+.slot__clear:hover {
+  color: var(--ink);
+  background: var(--surface-raised-hover);
+}
+
+/* ---------- チップ（体型・ポーズ） ---------- */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: var(--space-2xs) var(--space-sm);
+  font: inherit;
+  font-size: var(--text-sm);
+  /* 折り返すと押しづらくなるため、チップ内は常に1行 */
+  white-space: nowrap;
+  color: var(--ink-dim);
+  background: var(--surface-sunken);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  transition:
+    background var(--dur-micro) var(--ease-out),
+    color var(--dur-micro) var(--ease-out);
+}
+
+.chip:hover {
+  color: var(--ink);
+  background: var(--surface-raised);
+}
+
+.chip:active {
+  background: var(--surface-raised-hover);
+}
+
+.chip[aria-checked='true'] {
+  color: var(--ink);
+  background: var(--surface-selected);
+  border-color: var(--accent-dim);
+}
+
+/* ---------- スイッチ・フィールド ---------- */
+
+.switch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: var(--tap-min);
+  font-size: var(--text-sm);
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+.switch input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent-dim);
+}
+
+.switch__label {
+  min-width: 0;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  min-height: var(--tap-min);
+  font-size: var(--text-sm);
+  color: var(--ink-dim);
+}
+
+.field__label {
+  min-width: 0;
+}
+
+.select {
+  flex: none;
+  min-height: 36px;
+  padding: var(--space-2xs) var(--space-xs);
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--ink);
+  background: var(--surface-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-control);
+}
+
+/* ---------- ボタン ---------- */
+
+.actions {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.actions .button:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap-min);
+  padding: var(--space-xs) var(--space-md);
+  font: inherit;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  color: var(--ink);
+  background: var(--surface-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-raised);
+  cursor: pointer;
+  transition:
+    background var(--dur-micro) var(--ease-out),
+    border-color var(--dur-micro) var(--ease-out);
+}
+
+.button:hover {
+  background: var(--surface-raised-hover);
+}
+
+.button:active {
+  background: var(--surface-selected);
+}
+
+.button--primary {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+}
+
+.button:disabled {
+  color: var(--ink-faint);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* display指定はUAの[hidden]ルールに勝ってしまうため打ち消す */
+.button[hidden] {
+  display: none;
+}
+
+/* ---------- ステージへのドロップ ---------- */
+
+.stage[data-dragover='true']::after {
+  content: '顔の画像として取り込みます';
+  position: absolute;
+  inset: var(--space-md);
+  display: grid;
+  place-items: center;
+  padding: var(--space-md);
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--accent);
+  background: oklch(from var(--surface-stage) l c h / 0.78);
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius-panel);
+  pointer-events: none;
+}
+
+/* ---------- 範囲を選ぶ画面 ---------- */
+
+.cropper {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: calc(var(--space-md) + var(--safe-top)) calc(var(--space-md) + var(--safe-right))
+    calc(var(--space-md) + var(--safe-bottom)) calc(var(--space-md) + var(--safe-left));
+  background: oklch(from var(--surface-stage) calc(l - 0.03) c h);
+}
+
+.cropper__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.cropper__title {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.cropper__stage {
+  flex: 1;
+  /* flexの子は既定で縮まないため、明示しないとcanvasが画面を押し広げる */
+  min-height: 0;
+  min-width: 0;
+  border-radius: var(--radius-panel);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.cropper__canvas {
+  display: block;
+  /* 指の操作をスクロールに取られないようにする */
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.cropper__hint {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--ink-faint);
+}
+
+.cropper__foot {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.cropper__foot .button:last-child {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---------- モバイル ---------- */
+
+@media (max-width: 900px) {
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 42dvh minmax(0, 1fr);
+  }
+
+  .panel {
+    padding-top: var(--space-md);
+    padding-left: calc(var(--space-md) + var(--safe-left));
+    border-left: none;
+    border-top: 1px solid var(--rule);
+  }
+
+  .stage__hint {
+    bottom: var(--space-xs);
+  }
+
+  /* 指で操作する画面では選択肢を大きめに */
+  .chip {
+    min-height: 38px;
+  }
+}
+
+/* ---------- モーション設定の尊重 ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

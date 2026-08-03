@@ -1,0 +1,20 @@
+{
+  "bodies": [
+    {
+      "id": "standard",
+      "name": "標準"
+    },
+    {
+      "id": "heavy",
+      "name": "がっしり"
+    },
+    {
+      "id": "slim",
+      "name": "細身"
+    },
+    {
+      "id": "chibi",
+      "name": "頭身低め"
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+/* Low Poly Creator — デザイントークン
+   暖色寄りのニュートラルグレー1系統 + 抑えたアンバーのアクセント1色のみ。
+   面は色の差と髪の毛幅の罫線で分ける（枠線で囲わない）。 */
+:root {
+  color-scheme: dark;
+
+  /* 面（奥から手前へ） */
+  --surface-stage: oklch(15% 0.006 68);
+  --surface-panel: oklch(19.5% 0.006 68);
+  --surface-raised: oklch(24% 0.007 68);
+  --surface-raised-hover: oklch(28% 0.008 68);
+  --surface-sunken: oklch(17% 0.006 68);
+  --surface-selected: oklch(30% 0.02 74);
+
+  /* 文字 */
+  --ink: oklch(93% 0.008 78);
+  --ink-dim: oklch(68% 0.009 78);
+  --ink-faint: oklch(52% 0.008 78);
+
+  /* 罫線 */
+  --rule: oklch(28% 0.008 68);
+  --rule-soft: oklch(24% 0.007 68);
+
+  /* アクセント（唯一の有彩色。多用しない） */
+  --accent: oklch(78% 0.105 74);
+  --accent-dim: oklch(60% 0.085 74);
+  --accent-wash: oklch(30% 0.045 74);
+
+  --danger: oklch(66% 0.14 32);
+
+  --font-body:
+    system-ui, -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', monospace;
+
+  --space-2xs: 0.25rem;
+  --space-xs: 0.5rem;
+  --space-sm: 0.75rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2.25rem;
+
+  --text-xs: 0.6875rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-md: 1.125rem;
+
+  /* 同心円角丸: 外側から内側へ半径を縮める */
+  --radius-panel: 14px;
+  --radius-section: 10px;
+  --radius-control: 7px;
+  --radius-inner: 4px;
+
+  /* 薄い影のみ。落ち影を強くしない */
+  --shadow-raised: 0 1px 2px oklch(0% 0 0 / 0.28);
+  --shadow-float: 0 4px 14px oklch(0% 0 0 / 0.3);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-micro: 120ms;
+  --dur-short: 220ms;
+
+  /* 指で押せる最小の大きさ。モバイルの操作要素はこれを下回らない */
+  --tap-min: 44px;
+
+  /* 端末のセーフエリア（iPhoneのノッチ・ホームインジケータ） */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}

@@ -1,0 +1,204 @@
+{
+  "id": "standard",
+  "name": "標準",
+  "height": 1.7,
+  "palette": {
+    "skin": "#c99b76",
+    "skinShade": "#a97e5d",
+    "hair": "#3a2b22",
+    "cloth": "#4d5a6b",
+    "clothShade": "#3b4553",
+    "feature": "#2b211c",
+    "legs": "#3e4756",
+    "shoe": "#26292f"
+  },
+  "parts": [
+    {
+      "bone": "Head",
+      "shape": "rings",
+      "size": [0.112, 0.132, 0.118],
+      "offset": [0, 0.064, 0],
+      "uvSet": "head"
+    },
+    {
+      "bone": "Neck",
+      "shape": "rings",
+      "sides": 6,
+      "size": [0.056, 0.053, 0.056],
+      "offset": [0, 0.018, 0],
+      "uvSet": "skin",
+      "profile": [[0, 1, 1], [1, 1, 1]]
+    },
+    {
+      "bone": "Spine2",
+      "shape": "rings",
+      "size": [0.219, 0.124, 0.127],
+      "offset": [0, 0.012, 0],
+      "uvSet": "torso",
+      "profile": [[0, 0.88, 0.9], [0.45, 1, 1], [0.8, 1, 0.98], [1, 0.9, 0.9]],
+      "uvGroup": "torso",
+      "id": "chest"
+    },
+    {
+      "bone": "Spine1",
+      "shape": "rings",
+      "size": [0.185, 0.091, 0.114],
+      "offset": [0, 0, 0],
+      "uvSet": "torso",
+      "profile": [[0, 0.94, 0.96], [0.5, 1, 1], [1, 1, 1]],
+      "uvGroup": "torso",
+      "id": "abdomen"
+    },
+    {
+      "bone": "Hips",
+      "shape": "rings",
+      "size": [0.194, 0.121, 0.118],
+      "offset": [0, 0.044, 0],
+      "uvSet": "torso",
+      "profile": [[0, 0.97, 0.97], [0.2, 1.0, 1.0], [0.62, 1.0, 1.0], [1, 0.95, 0.95]],
+      "uvGroup": "torso",
+      "id": "pelvis"
+    },
+    {
+      "bone": "LeftArm",
+      "shape": "rings",
+      "axis": "x",
+      "sides": 8,
+      "size": [0.159, 0.069, 0.069],
+      "offset": [0.075, 0, 0],
+      "uvSet": "sleeve",
+      "mirror": true,
+      "profile": [[0, 1, 1], [0.5, 0.95, 0.95], [1, 0.88, 0.88]],
+      "uvGroup": "sleeve",
+      "id": "upperArm"
+    },
+    {
+      "bone": "LeftForeArm",
+      "shape": "rings",
+      "axis": "x",
+      "sides": 8,
+      "size": [0.159, 0.059, 0.059],
+      "offset": [0.075, 0, 0],
+      "uvSet": "skin",
+      "mirror": true,
+      "profile": [[0, 1, 1], [0.6, 0.9, 0.9], [1, 0.8, 0.8]],
+      "id": "forearm"
+    },
+    {
+      "bone": "LeftArm",
+      "shape": "rings",
+      "axis": "x",
+      "sides": 8,
+      "size": [0.075, 0.085, 0.085],
+      "offset": [0.012, 0.005, 0],
+      "uvSet": "sleeve",
+      "mirror": true,
+      "detail": "normal",
+      "profile": [[0, 0.72, 0.72], [0.4, 1, 1], [1, 0.84, 0.84]],
+      "uvGroup": "sleeve",
+      "id": "shoulder"
+    },
+    {
+      "bone": "LeftHand",
+      "shape": "rings",
+      "axis": "x",
+      "sides": 6,
+      "size": [0.059, 0.053, 0.029],
+      "offset": [0.029, 0, 0],
+      "uvSet": "skin",
+      "mirror": true,
+      "profile": [[0, 0.9, 0.95], [0.5, 1, 1], [1, 0.85, 0.8]]
+    },
+    {
+      "bone": "LeftHand",
+      "size": [0.0307, 0.0159, 0.0116],
+      "offset": [0.0143, -0.0053, 0.018],
+      "uvSet": "skin",
+      "mirror": true,
+      "detail": "high",
+      "rotate": [0, -42, 0]
+    },
+    {
+      "bone": "LeftHand",
+      "size": [0.0271, 0.0111, 0.0075],
+      "offset": [0.0697, 0.0021, 0.0093],
+      "uvSet": "skin",
+      "mirror": true,
+      "detail": "ultra",
+      "rotate": [0, -7, 0]
+    },
+    {
+      "bone": "LeftHand",
+      "size": [0.0319, 0.0111, 0.0075],
+      "offset": [0.0721, 0.0021, 0.0],
+      "uvSet": "skin",
+      "mirror": true,
+      "detail": "ultra",
+      "rotate": [0, 0, 0]
+    },
+    {
+      "bone": "LeftHand",
+      "size": [0.026, 0.0111, 0.0075],
+      "offset": [0.0691, 0.0021, -0.0093],
+      "uvSet": "skin",
+      "mirror": true,
+      "detail": "ultra",
+      "rotate": [0, 7, 0]
+    },
+    {
+      "bone": "Head",
+      "shape": "rings",
+      "axis": "x",
+      "sides": 6,
+      "size": [0.0157, 0.0317, 0.0236],
+      "offset": [0.0515, 0.0614, -0.0142],
+      "uvSet": "skin",
+      "mirror": true,
+      "detail": "high",
+      "profile": [[0, 0.85, 0.95], [1, 0.65, 0.8]]
+    },
+    {
+      "bone": "LeftUpLeg",
+      "shape": "rings",
+      "sides": 8,
+      "size": [0.0942, 0.247, 0.0942],
+      "offset": [0, -0.118, 0],
+      "uvSet": "legs",
+      "mirror": true,
+      "profile": [[0, 0.8, 0.83], [0.16, 0.86, 0.88], [0.58, 0.96, 0.96], [1, 1.0, 1.0]],
+      "uvGroup": "legs",
+      "id": "thigh"
+    },
+    {
+      "bone": "LeftLeg",
+      "shape": "rings",
+      "sides": 8,
+      "size": [0.0806, 0.247, 0.0806],
+      "offset": [0, -0.121, 0],
+      "uvSet": "legs",
+      "mirror": true,
+      "profile": [[0, 0.6, 0.68], [0.3, 0.8, 0.86], [0.6, 0.93, 0.95], [0.85, 0.86, 0.88], [1, 0.97, 0.97]],
+      "uvGroup": "legs",
+      "id": "shin"
+    },
+    {
+      "bone": "LeftFoot",
+      "shape": "rings",
+      "axis": "z",
+      "sides": 8,
+      "size": [0.065, 0.045, 0.141],
+      "offset": [0, -0.0225, 0.032],
+      "uvSet": "shoe",
+      "mirror": true,
+      "profile": [[0, 0.94, 0.8], [0.28, 1, 1], [0.75, 1, 0.96], [1, 0.82, 0.66]]
+    },
+    {
+      "bone": "LeftFoot",
+      "size": [0.048, 0.03, 0.03],
+      "offset": [0, -0.03, -0.04],
+      "uvSet": "shoe",
+      "mirror": true,
+      "detail": "high"
+    }
+  ]
+}
