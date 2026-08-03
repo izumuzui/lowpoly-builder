@@ -48,13 +48,24 @@
         <p class="stage__hint">ドラッグで回転 / ホイールで拡大縮小</p>
       </main>
 
-      <aside class="panel">
+      <aside class="panel" id="settings-panel">
         <header class="panel__head">
-          <h1 class="panel__title">Low Poly Creator</h1>
-          <p class="panel__lede">
-            画像を貼ってPS1風のキャラクターを作り、Blender用の <code>.glb</code> として書き出します。
-            画像は端末の外に出ません。
-          </p>
+          <div class="panel__intro">
+            <h1 class="panel__title">Low Poly Creator</h1>
+            <p class="panel__lede">
+              画像を貼ってPS1風のキャラクターを作り、Blender用の <code>.glb</code> として書き出します。
+              画像は端末の外に出ません。
+            </p>
+          </div>
+          <button
+            class="button panel__toggle"
+            id="panel-toggle"
+            type="button"
+            aria-controls="settings-panel"
+            aria-expanded="true"
+          >
+            設定を閉じる
+          </button>
         </header>
 
         <!-- 画像を最初に置く。顔も服も同じ「枠に貼る」操作に統一してある -->

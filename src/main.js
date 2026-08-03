@@ -49,7 +49,10 @@ const CROP_MODES = {
 }
 
 const el = {
+  app: document.querySelector('.app'),
   stage: document.querySelector('.stage'),
+  panel: document.getElementById('settings-panel'),
+  panelToggle: document.getElementById('panel-toggle'),
   status: document.getElementById('status'),
   slotList: document.getElementById('slot-list'),
   slotNote: document.getElementById('slot-note'),
@@ -91,6 +94,19 @@ const state = {
 function setStatus(message, tone = 'info') {
   el.status.textContent = message
   el.status.dataset.tone = tone
+}
+
+function wirePanelToggle() {
+  const setCollapsed = (collapsed) => {
+    el.app.classList.toggle('app--panel-collapsed', collapsed)
+    el.panel.classList.toggle('panel--collapsed', collapsed)
+    el.panelToggle.setAttribute('aria-expanded', String(!collapsed))
+    el.panelToggle.textContent = collapsed ? '設定を開く' : '設定を閉じる'
+  }
+
+  el.panelToggle.addEventListener('click', () => {
+    setCollapsed(!el.panel.classList.contains('panel--collapsed'))
+  })
 }
 
 /* ---------- モデルの組み立て ---------- */
@@ -510,6 +526,7 @@ function formatBytes(bytes) {
 
 async function main() {
   state.viewer = createViewer(document.getElementById('viewport'))
+  wirePanelToggle()
   wireExport()
 
   const list = await loadBodyList()
