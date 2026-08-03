@@ -84,9 +84,8 @@ export function paintFace(atlas, source, detection) {
   const eyeCenterX = (left.x + right.x) / 2
   const eyeCenterY = (left.y + right.y) / 2
 
-  // 写真は一度別のcanvasに描いてから外周をぼかす。
-  // 顔テクスチャは頭の正面だけでなく斜め前の面にも回り込むため、
-  // 切り抜かないと写真の背景や耳が頭の側面に貼り付いてしまう。
+  // 位置合わせ・回転を済ませた写真を一度別のcanvasへ描く。
+  // 写真はマスクせず、顔のUV領域を矩形のまま埋める。
   const cut = document.createElement('canvas')
   cut.width = rw
   cut.height = rh
@@ -103,11 +102,9 @@ export function paintFace(atlas, source, detection) {
   cutCtx.drawImage(source, 0, 0)
   cutCtx.setTransform(1, 0, 0, 1, 0, 0)
 
-  featherToOval(cutCtx, rw, rh)
-
   const { ctx } = atlas
-  ctx.fillStyle = atlas.colors.skin
-  ctx.fillRect(rx, ry, rw, rh)
+  // 以前の仮の顔や肌色の下地を残さない。
+  ctx.clearRect(rx, ry, rw, rh)
   ctx.imageSmoothingEnabled = false
   ctx.drawImage(cut, rx, ry)
 
@@ -118,9 +115,6 @@ export function paintFace(atlas, source, detection) {
 /**
  * 切り出し済みの画像を、位置合わせなしで顔領域へ貼る。
  * 利用者が矩形で範囲を選んだ場合に使う。
- *
- * 外周を楕円状に溶かすのは自動の場合と同じ。顔テクスチャは頭の正面だけでなく
- * 斜め前の面にも回り込むため、切り抜かないと画像の縁が頭の側面に貼り付く。
  */
 export function paintFaceCrop(atlas, image) {
   const [rx, ry, rw, rh] = region('face')
@@ -138,42 +132,14 @@ export function paintFaceCrop(atlas, image) {
   const drawH = image.height * scale
   cutCtx.drawImage(image, (rw - drawW) / 2, (rh - drawH) / 2, drawW, drawH)
 
-  featherToOval(cutCtx, rw, rh)
-
   const { ctx } = atlas
-  ctx.fillStyle = atlas.colors.skin
-  ctx.fillRect(rx, ry, rw, rh)
+  // 以前の仮の顔や肌色の下地を残さない。
+  ctx.clearRect(rx, ry, rw, rh)
   ctx.imageSmoothingEnabled = false
   ctx.drawImage(cut, rx, ry)
 
   quantize15bit(ctx, region('face'))
   atlas.commit()
-}
-
-/**
- * 楕円状に外周を透明へ落とす。
- * 顔の中心は写真のまま残し、輪郭の外側だけを下地の肌色へ溶かす。
- */
-function featherToOval(ctx, width, height) {
-  const cx = width * 0.5
-  const cy = height * (EYE_LINE + 0.08)
-  const radius = width * 0.5
-
-  ctx.save()
-  // 縦長の楕円にする
-  ctx.translate(cx, cy)
-  ctx.scale(1, 1.18)
-  ctx.translate(-cx, -cy)
-
-  const mask = ctx.createRadialGradient(cx, cy, radius * 0.62, cx, cy, radius)
-  mask.addColorStop(0, 'rgba(0, 0, 0, 1)')
-  mask.addColorStop(1, 'rgba(0, 0, 0, 0)')
-
-  ctx.globalCompositeOperation = 'destination-in'
-  ctx.fillStyle = mask
-  // scaleした分だけ塗り範囲も広げる
-  ctx.fillRect(-width, -height, width * 3, height * 3)
-  ctx.restore()
 }
 
 /**
