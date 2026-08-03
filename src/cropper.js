@@ -12,6 +12,7 @@
 
 /** 書き出すcanvasの最大辺。アトラスは256pxなのでこれ以上は無駄になる。 */
 const MAX_OUTPUT = 512
+const MIN_RECT_SIZE = 8
 
 /**
  * @param {object} options
@@ -65,9 +66,13 @@ export function openCropper({ image, label, modes, initial = null, detection = n
 
     const state = {
       mode: initialMode,
-      rect: initial?.rect ?? null,
+      // 選択枠は表示サイズが変わっても位置を保てるよう、決定時には元画像座標で保存する。
+      rect: null,
+      initialRect: initial?.rect ?? null,
+      initialRectSpace: initial?.rectSpace ?? 'canvas',
       path: initial?.path ?? null,
       drawing: false,
+      drag: null,
       scale: 1,
       offsetX: 0,
       offsetY: 0,
@@ -81,6 +86,8 @@ export function openCropper({ image, label, modes, initial = null, detection = n
     function layout() {
       const box = stage.getBoundingClientRect()
       if (box.width === 0 || box.height === 0) return
+      // ResizeObserverで再レイアウトされても、選択中の矩形を元画像上の位置で保つ。
+      const currentRect = state.rect ? rectToImage(state.rect) : null
       const ratio = Math.min(window.devicePixelRatio, 2)
       canvas.width = Math.round(box.width * ratio)
       canvas.height = Math.round(box.height * ratio)
@@ -90,7 +97,60 @@ export function openCropper({ image, label, modes, initial = null, detection = n
       state.scale = Math.min(canvas.width / image.width, canvas.height / image.height)
       state.offsetX = (canvas.width - image.width * state.scale) / 2
       state.offsetY = (canvas.height - image.height * state.scale) / 2
+
+      if (currentRect) {
+        state.rect = rectToCanvas(currentRect)
+      } else if (state.initialRect) {
+        state.rect = state.initialRectSpace === 'image'
+          ? rectToCanvas(state.initialRect)
+          : state.initialRect
+        state.initialRect = null
+      }
+      syncMode()
       draw()
+    }
+
+    function rectToImage(rect) {
+      return {
+        x: (rect.x - state.offsetX) / state.scale,
+        y: (rect.y - state.offsetY) / state.scale,
+        w: rect.w / state.scale,
+        h: rect.h / state.scale,
+      }
+    }
+
+    function rectToCanvas(rect) {
+      return {
+        x: state.offsetX + rect.x * state.scale,
+        y: state.offsetY + rect.y * state.scale,
+        w: rect.w * state.scale,
+        h: rect.h * state.scale,
+      }
+    }
+
+    function imageBounds() {
+      return {
+        x: state.offsetX,
+        y: state.offsetY,
+        w: image.width * state.scale,
+        h: image.height * state.scale,
+      }
+    }
+
+    function clamp(value, min, max) {
+      return Math.min(Math.max(value, min), max)
+    }
+
+    function clampToImage(point) {
+      const bounds = imageBounds()
+      return {
+        x: clamp(point.x, bounds.x, bounds.x + bounds.w),
+        y: clamp(point.y, bounds.y, bounds.y + bounds.h),
+      }
+    }
+
+    function uiScale() {
+      return Math.min(window.devicePixelRatio, 2)
     }
 
     function shapePath(target) {
@@ -173,6 +233,38 @@ export function openCropper({ image, label, modes, initial = null, detection = n
       shapePath(ctx)
       ctx.stroke()
       ctx.restore()
+
+      if (state.mode === 'rect') drawRectHandles()
+    }
+
+    function rectHandles(rect = state.rect) {
+      const x2 = rect.x + rect.w
+      const y2 = rect.y + rect.h
+      const midX = (rect.x + x2) / 2
+      const midY = (rect.y + y2) / 2
+      return {
+        nw: { x: rect.x, y: rect.y },
+        n: { x: midX, y: rect.y },
+        ne: { x: x2, y: rect.y },
+        e: { x: x2, y: midY },
+        se: { x: x2, y: y2 },
+        s: { x: midX, y: y2 },
+        sw: { x: rect.x, y: y2 },
+        w: { x: rect.x, y: midY },
+      }
+    }
+
+    function drawRectHandles() {
+      const size = 9 * uiScale()
+      ctx.save()
+      ctx.fillStyle = '#d9a441'
+      ctx.strokeStyle = '#1a1815'
+      ctx.lineWidth = Math.max(1, uiScale())
+      for (const point of Object.values(rectHandles())) {
+        ctx.fillRect(point.x - size / 2, point.y - size / 2, size, size)
+        ctx.strokeRect(point.x - size / 2, point.y - size / 2, size, size)
+      }
+      ctx.restore()
     }
 
     /* ---------- 入力（マウスもタッチも同じ経路） ---------- */
@@ -185,25 +277,94 @@ export function openCropper({ image, label, modes, initial = null, detection = n
       }
     }
 
+    function rectHit(point) {
+      if (!state.rect) return { type: 'draw' }
+      const radius = 12 * uiScale()
+      for (const [handle, target] of Object.entries(rectHandles())) {
+        if (Math.abs(point.x - target.x) <= radius && Math.abs(point.y - target.y) <= radius) {
+          return { type: 'resize', handle }
+        }
+      }
+      const { x, y, w, h } = state.rect
+      if (point.x >= x && point.x <= x + w && point.y >= y && point.y <= y + h) {
+        return { type: 'move' }
+      }
+      return { type: 'draw' }
+    }
+
+    function cursorFor(hit) {
+      if (hit.type === 'move') return 'move'
+      if (hit.type !== 'resize') return 'crosshair'
+      if (hit.handle === 'n' || hit.handle === 's') return 'ns-resize'
+      if (hit.handle === 'e' || hit.handle === 'w') return 'ew-resize'
+      return hit.handle === 'ne' || hit.handle === 'sw' ? 'nesw-resize' : 'nwse-resize'
+    }
+
+    function resizeRect(rect, handle, point) {
+      const bounds = imageBounds()
+      const minSize = MIN_RECT_SIZE * uiScale()
+      let left = rect.x
+      let top = rect.y
+      let right = rect.x + rect.w
+      let bottom = rect.y + rect.h
+
+      if (handle.includes('w')) left = clamp(point.x, bounds.x, right - minSize)
+      if (handle.includes('e')) right = clamp(point.x, left + minSize, bounds.x + bounds.w)
+      if (handle.includes('n')) top = clamp(point.y, bounds.y, bottom - minSize)
+      if (handle.includes('s')) bottom = clamp(point.y, top + minSize, bounds.y + bounds.h)
+
+      return { x: left, y: top, w: right - left, h: bottom - top }
+    }
+
+    function moveRect(rect, dx, dy) {
+      const bounds = imageBounds()
+      return {
+        x: clamp(rect.x + dx, bounds.x, Math.max(bounds.x, bounds.x + bounds.w - rect.w)),
+        y: clamp(rect.y + dy, bounds.y, Math.max(bounds.y, bounds.y + bounds.h - rect.h)),
+        w: rect.w,
+        h: rect.h,
+      }
+    }
+
     canvas.addEventListener('pointerdown', (event) => {
       if (!needsShape()) return
+      event.preventDefault()
       // 画面外へ指が出ても追従させる。捕捉できない環境では黙って続行する
       try {
         canvas.setPointerCapture(event.pointerId)
       } catch {}
       state.drawing = true
-      const point = toCanvas(event)
-      if (state.mode === 'rect') state.rect = { x: point.x, y: point.y, w: 0, h: 0 }
-      else state.path = [point]
+      const point = clampToImage(toCanvas(event))
+      if (state.mode === 'rect') {
+        const hit = rectHit(point)
+        if (hit.type === 'draw') state.rect = { x: point.x, y: point.y, w: 0, h: 0 }
+        state.drag = { ...hit, point, rect: state.rect && { ...state.rect } }
+      } else {
+        state.path = [point]
+        state.drag = { type: 'draw', point }
+      }
       draw()
     })
 
     canvas.addEventListener('pointermove', (event) => {
-      if (!state.drawing) return
-      const point = toCanvas(event)
+      const point = clampToImage(toCanvas(event))
+      if (!state.drawing) {
+        if (state.mode === 'rect') canvas.style.cursor = cursorFor(rectHit(point))
+        return
+      }
       if (state.mode === 'rect') {
-        state.rect.w = point.x - state.rect.x
-        state.rect.h = point.y - state.rect.y
+        if (state.drag.type === 'move') {
+          state.rect = moveRect(
+            state.drag.rect,
+            point.x - state.drag.point.x,
+            point.y - state.drag.point.y,
+          )
+        } else if (state.drag.type === 'resize') {
+          state.rect = resizeRect(state.drag.rect, state.drag.handle, point)
+        } else {
+          state.rect.w = point.x - state.rect.x
+          state.rect.h = point.y - state.rect.y
+        }
       } else {
         state.path.push(point)
       }
@@ -213,7 +374,7 @@ export function openCropper({ image, label, modes, initial = null, detection = n
     const finish = () => {
       if (!state.drawing) return
       state.drawing = false
-      if (state.mode === 'rect' && state.rect) {
+      if (state.mode === 'rect' && state.rect && state.drag.type === 'draw') {
         // 逆向きに引かれても正の矩形に直す
         if (state.rect.w < 0) {
           state.rect.x += state.rect.w
@@ -224,6 +385,7 @@ export function openCropper({ image, label, modes, initial = null, detection = n
           state.rect.h = -state.rect.h
         }
       }
+      state.drag = null
       draw()
     }
     canvas.addEventListener('pointerup', finish)
@@ -281,7 +443,10 @@ export function openCropper({ image, label, modes, initial = null, detection = n
       for (const chip of root.querySelectorAll('.chip')) {
         chip.setAttribute('aria-checked', String(chip.dataset.mode === state.mode))
       }
-      hint.textContent = byId(state.mode)?.hint ?? ''
+      const modeHint = byId(state.mode)?.hint ?? ''
+      hint.textContent = state.mode === 'rect'
+        ? `${modeHint} 選択後は枠の内側をドラッグで移動、四隅・各辺をドラッグで伸縮できます。`
+        : modeHint
       canvas.style.cursor = needsShape() ? 'crosshair' : 'default'
       root.querySelector('[data-act="apply"]').disabled = !canApply()
     }
@@ -291,6 +456,8 @@ export function openCropper({ image, label, modes, initial = null, detection = n
         state.mode = chip.dataset.mode
         state.rect = null
         state.path = null
+        state.drag = null
+        state.drawing = false
         syncMode()
         draw()
       })
@@ -318,7 +485,12 @@ export function openCropper({ image, label, modes, initial = null, detection = n
           canvas: needsShape() ? extract() : null,
           // 矩形は敷き詰め、フリーハンドは形を保つ
           fit: state.mode === 'free' ? 'contain' : 'cover',
-          selection: { mode: state.mode, rect: state.rect, path: state.path },
+          selection: {
+            mode: state.mode,
+            rect: state.mode === 'rect' ? rectToImage(state.rect) : null,
+            rectSpace: state.mode === 'rect' ? 'image' : undefined,
+            path: state.path,
+          },
         })
       }
     })
