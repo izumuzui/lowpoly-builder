@@ -6,7 +6,7 @@ import {
   MEDIAPIPE_VISION_MODULE,
   MEDIAPIPE_WASM_BASE,
   SELFIE_MULTICLASS_MODEL,
-} from './config.js?v=20260804-13'
+} from './config.js?v=20260805-14'
 
 const CATEGORY = {
   background: 0,
@@ -71,7 +71,7 @@ export async function segmentPerson(image) {
 
 function segmentationWorker() {
   if (worker) return worker
-  worker = new Worker(new URL('./auto-texture-worker.js?v=20260804-13', import.meta.url))
+  worker = new Worker(new URL('./auto-texture-worker.js?v=20260805-14', import.meta.url))
   worker.addEventListener('message', (event) => {
     const request = requests.get(event.data.id)
     if (!request) return
@@ -167,6 +167,25 @@ export function createAutomaticTextureParts(image, segmentation, {
   for (const [name, predicate] of Object.entries(definitions)) {
     const part = maskedPart(pixels, categoryPlane, width, height, predicate, sourceWidth, sourceHeight)
     if (part) parts[name] = part
+  }
+
+  // paintSlotは画像の中央68%を胴体、左端16%を袖・側面の生地として読む。
+  // 胴体だけを切り出した透明画像をそのまま渡すと左端が透明になり、既定色が残るため、
+  // 腕から拾った代表色の生地帯と胴体写真を1枚に組み直す。
+  if (parts.shirt) {
+    const sleeves = maskedPart(
+      pixels,
+      categoryPlane,
+      width,
+      height,
+      (category, x, y) => clothes(category) && inArmArea(x, y, anchors, personWidth),
+      sourceWidth,
+      sourceHeight,
+      { minPartRatio: MIN_PART_RATIO * 0.12 },
+    )
+    const fabricColor = representativeOpaqueColor(sleeves?.canvas ?? parts.shirt.canvas)
+    parts.shirt.canvas = composeShirtTexture(parts.shirt.canvas, fabricColor)
+    parts.shirt.fabricColor = fabricColor
   }
 
   // 顔は全身写真でも解像度を落とさないよう、元画像から頭部だけを直接切り出す。
@@ -448,6 +467,50 @@ function inFootArea(x, y, anchors, personWidth, personHeight) {
     && y <= anchors.bounds.bottom + personHeight * 0.025
 }
 
+/** アトラス転写側の窓配置に合わせ、左右16%を袖・側面用の不透明な生地にする。 */
+function composeShirtTexture(torso, fabricColor) {
+  const width = Math.max(3, Math.ceil(torso.width / 0.68))
+  const height = Math.max(1, torso.height)
+  const sideWidth = Math.max(1, Math.floor(width * 0.16))
+  const torsoWidth = Math.max(1, width - sideWidth * 2)
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = fabricColor
+  ctx.fillRect(0, 0, width, height)
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(torso, 0, 0, torso.width, torso.height, sideWidth, 0, torsoWidth, height)
+  return canvas
+}
+
+/** 透明画素を除外したRGB中央値。ロゴや照明より服の地色を優先する。 */
+function representativeOpaqueColor(image) {
+  const ctx = image.getContext('2d', { willReadFrequently: true })
+  const { data } = ctx.getImageData(0, 0, image.width, image.height)
+  const histograms = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)]
+  let count = 0
+  for (let index = 0; index < data.length; index += 4) {
+    if (data[index + 3] < 64) continue
+    histograms[0][data[index]] += 1
+    histograms[1][data[index + 1]] += 1
+    histograms[2][data[index + 2]] += 1
+    count += 1
+  }
+  if (!count) return '#4d5a6b'
+  const middle = Math.ceil(count / 2)
+  const median = (histogram) => {
+    let total = 0
+    for (let value = 0; value < histogram.length; value += 1) {
+      total += histogram[value]
+      if (total >= middle) return value
+    }
+    return 0
+  }
+  return `rgb(${median(histograms[0])}, ${median(histograms[1])}, ${median(histograms[2])})`
+}
+
 /**
  * 元画像の解像度を保った頭部canvasを作る。
  * セグメンテーションが小さい顔を消した場合は、検出枠の楕円をマスクとして使う。
@@ -600,7 +663,7 @@ function maskedPart(
   predicate,
   sourceWidth,
   sourceHeight,
-  { crop = true } = {},
+  { crop = true, minPartRatio = MIN_PART_RATIO } = {},
 ) {
   const data = new Uint8ClampedArray(sourcePixels.data)
   let left = width
@@ -634,7 +697,7 @@ function maskedPart(
     }
   }
 
-  if (count < width * height * MIN_PART_RATIO || right < left || bottom < top) return null
+  if (count < width * height * minPartRatio || right < left || bottom < top) return null
   const full = document.createElement('canvas')
   full.width = width
   full.height = height
