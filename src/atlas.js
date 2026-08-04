@@ -41,8 +41,18 @@ export const REGIONS = {
   torsoSide: [128, 128, 32, 96],
   sleeve: [160, 128, 32, 96],
   skin: [192, 128, 32, 96],
+  // 脚の正面写真は左右で分ける。legs はスカート用に両方を束ねた互換領域。
   legs: [224, 128, 32, 96],
+  legLeftFront: [224, 128, 16, 96],
+  legRightFront: [240, 128, 16, 96],
+  legSide: [64, 224, 16, 32],
+  legBack: [80, 224, 16, 32],
+  // shoe は互換領域。通常の足は左右別の正面と、無地の側面・背面を使う。
   shoe: [0, 224, 64, 32],
+  shoeLeftFront: [0, 224, 32, 32],
+  shoeRightFront: [32, 224, 32, 32],
+  shoeSide: [96, 224, 32, 32],
+  shoeBack: [128, 224, 32, 32],
 }
 
 /** uvSet名 → 箱の6面がどの領域を使うか。px=+X面, nz=-Z面 のように表す。 */
@@ -67,8 +77,12 @@ export const UV_SETS = {
   sleeve: fill('sleeve'),
   // 襟・フード・ポケットなど、同じ服の中で段差を読ませるための濃い面
   clothShade: fill('torsoSide'),
-  legs: fill('legs'),
-  shoe: fill('shoe'),
+  legs: directional('legs', 'legBack', 'legSide'),
+  legsLeft: directional('legLeftFront', 'legBack', 'legSide'),
+  legsRight: directional('legRightFront', 'legBack', 'legSide'),
+  shoe: directional('shoe', 'shoeBack', 'shoeSide'),
+  shoeLeft: directional('shoeLeftFront', 'shoeBack', 'shoeSide'),
+  shoeRight: directional('shoeRightFront', 'shoeBack', 'shoeSide'),
 }
 
 /**
@@ -80,8 +94,14 @@ export const UV_SETS = {
  */
 export const TEXTURE_SLOTS = {
   shirt: { label: '服', regions: ['torsoFront', 'torsoBack', 'torsoSide', 'sleeve'] },
-  pants: { label: 'ズボン', regions: ['legs'] },
-  shoes: { label: '靴', regions: ['shoe'] },
+  pants: {
+    label: 'ズボン',
+    regions: ['legLeftFront', 'legRightFront', 'legSide', 'legBack'],
+  },
+  shoes: {
+    label: '靴',
+    regions: ['shoeLeftFront', 'shoeRightFront', 'shoeSide', 'shoeBack'],
+  },
   // 背面・側面の写真を流し込む枠。服より後に塗って上書きする
   shirtBack: { label: '服（背面）', regions: ['torsoBack'] },
   hair: { label: '髪・後頭部', regions: ['headBack', 'headSide', 'headTop'] },
@@ -89,6 +109,11 @@ export const TEXTURE_SLOTS = {
 
 function fill(name) {
   return { pz: name, nz: name, px: name, nx: name, py: name, ny: name }
+}
+
+/** 正面だけ写真を使い、それ以外は側面・背面の地色へ逃がす。 */
+function directional(front, back, side) {
+  return { pz: front, nz: back, px: side, nx: side, py: side, ny: side }
 }
 
 /**
@@ -121,7 +146,15 @@ const REGION_BASE = {
   skin: 'skin',
   sleeve: 'cloth',
   legs: 'legs',
+  legLeftFront: 'legs',
+  legRightFront: 'legs',
+  legSide: 'legs',
+  legBack: 'legs',
   shoe: 'shoe',
+  shoeLeftFront: 'shoe',
+  shoeRightFront: 'shoe',
+  shoeSide: 'shoe',
+  shoeBack: 'shoe',
 }
 
 /**
@@ -231,6 +264,10 @@ const SOURCE_WINDOW = {
   torsoBack: [0.16, 0, 0.68, 1],
   torsoSide: [0, 0, 0.16, 1],
   sleeve: [0, 0, 0.16, 1],
+  legLeftFront: [0, 0, 0.5, 1],
+  legRightFront: [0.5, 0, 0.5, 1],
+  shoeLeftFront: [0, 0, 0.5, 1],
+  shoeRightFront: [0.5, 0, 0.5, 1],
   headBack: [0.18, 0, 0.64, 1],
   headSide: [0, 0, 0.18, 1],
   headTop: [0.18, 0, 0.64, 0.35],
@@ -248,7 +285,7 @@ const FULL_WINDOW = [0, 0, 1, 1]
  * どちらの場合も先に下地を塗る。フリーハンドで切り出した画像は形の外が透明なので、
  * 下地がないと背後の描画が透けてしまう。
  */
-export function paintSlot(atlas, slotId, image, { fit = 'cover' } = {}) {
+export function paintSlot(atlas, slotId, image, { fit = 'cover', regionImages = null } = {}) {
   const slot = TEXTURE_SLOTS[slotId]
   if (!slot) throw new Error(`未定義のテクスチャ枠: ${slotId}`)
 
@@ -262,11 +299,15 @@ export function paintSlot(atlas, slotId, image, { fit = 'cover' } = {}) {
   for (const regionName of targets) {
     const rect = region(regionName)
     const [x, y, w, h] = rect
+    const regionImage = regionImages?.[regionName] ?? image
+    const hasRegionImage = Boolean(regionImages?.[regionName])
     // 形として貼る場合は画像全体を使う。切り抜いた形を欠けさせないため
-    const window = fit === 'contain' ? FULL_WINDOW : (SOURCE_WINDOW[regionName] ?? FULL_WINDOW)
+    const window = fit === 'contain' || hasRegionImage
+      ? FULL_WINDOW
+      : (SOURCE_WINDOW[regionName] ?? FULL_WINDOW)
     ctx.fillStyle = atlas.colors[REGION_BASE[regionName]]
     ctx.fillRect(x, y, w, h)
-    drawFitted(ctx, image, x, y, w, h, fit, window)
+    drawFitted(ctx, regionImage, x, y, w, h, fit, window)
     quantize15bit(ctx, rect)
   }
 

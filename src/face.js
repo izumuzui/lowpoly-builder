@@ -6,7 +6,7 @@
  * 128pxまで落とすため、切り抜きの粗さはむしろ味になる。
  */
 import { MEDIAPIPE_WASM_BASE, FACE_DETECTOR_MODEL } from './config.js?v=20260805-14'
-import { region, quantize15bit, drawPlaceholderFace, FACE_ANCHOR } from './atlas.js'
+import { region, quantize15bit, drawPlaceholderFace, FACE_ANCHOR } from './atlas.js?v=20260805-16'
 
 const { eyeSpan: EYE_SPAN, eyeLine: EYE_LINE } = FACE_ANCHOR
 

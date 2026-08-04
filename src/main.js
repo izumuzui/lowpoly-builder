@@ -1,9 +1,9 @@
 import { createViewer } from './viewer.js'
-import { createAtlas, region, paintSlot, setAtlasScale } from './atlas.js'
-import { loadBodyList, loadBodySpec, buildBody } from './body.js'
-import { decodeImage, detectFace, paintFace, paintFaceCrop, sampleSkinTone, shadeOf } from './face.js?v=20260805-14'
+import { createAtlas, region, paintSlot, setAtlasScale } from './atlas.js?v=20260805-16'
+import { loadBodyList, loadBodySpec, buildBody } from './body.js?v=20260805-16'
+import { decodeImage, detectFace, paintFace, paintFaceCrop, sampleSkinTone, shadeOf } from './face.js?v=20260805-16'
 import { applyPhotoPose, detectPhotoPose } from './photo-pose.js?v=20260805-14'
-import { createAutomaticTextureParts, segmentPerson } from './auto-texture.js?v=20260805-14'
+import { createAutomaticTextureParts, segmentPerson } from './auto-texture.js?v=20260805-16'
 import { openCropper } from './cropper.js'
 import { POSES, applyPose } from './poses.js'
 import { TOPS, BOTTOMS } from './clothing.js?v=20260805-15'
@@ -21,8 +21,8 @@ const SLOTS = [
   // 服より後に並べる。この順で塗るため、背面・髪が服を上書きする
   { id: 'shirtBack', label: '服（背面）', preview: 'torsoBack', hint: '背面の写真' },
   { id: 'hair', label: '髪・後頭部', preview: 'headBack', hint: '背面の写真' },
-  { id: 'pants', label: 'ズボン', preview: 'legs', hint: '写真から選ぶ' },
-  { id: 'shoes', label: '靴', preview: 'shoe', hint: '写真から選ぶ' },
+  { id: 'pants', label: 'ズボン', preview: 'legLeftFront', hint: '写真から選ぶ' },
+  { id: 'shoes', label: '靴', preview: 'shoeLeftFront', hint: '写真から選ぶ' },
   // アトラスには入らない。背景として3Dシーンの奥に敷く
   { id: 'background', label: '背景', preview: null, hint: '画像から選ぶ' },
 ]
@@ -145,7 +145,10 @@ function rebuild({ reframe = false } = {}) {
     if (!filled) continue
     if (slot.id === 'background') continue
     if (!slot.detect) {
-      paintSlot(state.atlas, slot.id, filled.image, { fit: filled.fit })
+      paintSlot(state.atlas, slot.id, filled.image, {
+        fit: filled.fit,
+        regionImages: filled.regionImages,
+      })
     } else if (filled.selection?.mode === 'auto') {
       paintFace(state.atlas, filled.image, filled.detection)
     } else {
@@ -650,6 +653,7 @@ async function applyAutomaticTextureFromActiveSource() {
           ? sampleSkinTone(source.image, part.sourceDetection ?? source.detection)
           : undefined,
         automatic: true,
+        regionImages: part.regionImages,
       }
       applied.push({ id: slotId, label: slot?.label ?? slotId })
     }

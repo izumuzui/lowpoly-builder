@@ -188,6 +188,88 @@ export function createAutomaticTextureParts(image, segmentation, {
     parts.shirt.fabricColor = fabricColor
   }
 
+  // 脚と靴を1枚の切り抜きとして全方向へ貼ると、同じ輪郭やハイライトが
+  // 左右・側面・背面へ何度も現れる。正面だけを左右別に切り出し、写真に
+  // 写っていない面は代表色で埋めた専用画像を渡す。
+  if (parts.pants) {
+    const sideParts = Object.fromEntries(['left', 'right'].map((side) => [
+      side,
+      maskedPart(
+        pixels,
+        categoryPlane,
+        width,
+        height,
+        (category, x, y) =>
+          clothes(category)
+          && inLegSideArea(x, y, anchors, personWidth, side)
+          && !inArmArea(x, y, anchors, personWidth)
+          && y >= anchors.hipY - personHeight * 0.025
+          && y <= anchors.ankleY - personHeight * 0.015,
+        sourceWidth,
+        sourceHeight,
+        { crop: false, minPartRatio: MIN_PART_RATIO * 0.25 },
+      ),
+    ]))
+    const fabricColor = representativeOpaqueColor(parts.pants.canvas)
+    parts.pants.regionImages = {
+      legLeftFront: normalizedRegionTexture(
+        sideParts.left?.canvas,
+        fabricColor,
+        32,
+        192,
+        legProjectionWindow(anchors, personWidth, personHeight, 'left'),
+      ),
+      legRightFront: normalizedRegionTexture(
+        sideParts.right?.canvas,
+        fabricColor,
+        32,
+        192,
+        legProjectionWindow(anchors, personWidth, personHeight, 'right'),
+      ),
+      legSide: normalizedRegionTexture(null, fabricColor, 32, 64),
+      legBack: normalizedRegionTexture(null, fabricColor, 32, 64),
+    }
+    parts.pants.fabricColor = fabricColor
+  }
+
+  if (parts.shoes) {
+    const sideParts = Object.fromEntries(['left', 'right'].map((side) => [
+      side,
+      maskedPart(
+        pixels,
+        categoryPlane,
+        width,
+        height,
+        (category, x, y) =>
+          footwear(category)
+          && inFootSideArea(x, y, anchors, personWidth, personHeight, side),
+        sourceWidth,
+        sourceHeight,
+        { crop: false, minPartRatio: MIN_PART_RATIO * 0.08 },
+      ),
+    ]))
+    const fabricColor = representativeOpaqueColor(parts.shoes.canvas)
+    parts.shoes.regionImages = {
+      shoeLeftFront: normalizedRegionTexture(
+        sideParts.left?.canvas,
+        fabricColor,
+        96,
+        96,
+        footProjectionWindow(anchors, personWidth, personHeight, 'left'),
+      ),
+      shoeRightFront: normalizedRegionTexture(
+        sideParts.right?.canvas,
+        fabricColor,
+        96,
+        96,
+        footProjectionWindow(anchors, personWidth, personHeight, 'right'),
+      ),
+      shoeSide: normalizedRegionTexture(null, fabricColor, 96, 96),
+      shoeBack: normalizedRegionTexture(null, fabricColor, 96, 96),
+    }
+    parts.shoes.fabricColor = fabricColor
+  }
+
   // 顔は全身写真でも解像度を落とさないよう、元画像から頭部だけを直接切り出す。
   if (facing === 'front' && resolvedFaceDetection) {
     const face = createFacePart(
@@ -261,22 +343,28 @@ function bodyAnchors(landmarks, bounds) {
   const hipY = averageY(LANDMARK.leftHip, LANDMARK.rightHip, bounds.top + height * 0.53)
   const kneeY = averageY(LANDMARK.leftKnee, LANDMARK.rightKnee, bounds.top + height * 0.75)
   const ankleY = averageY(LANDMARK.leftAnkle, LANDMARK.rightAnkle, bounds.top + height * 0.91)
-  const feet = [
-    footAnchor(visible(LANDMARK.leftAnkle), visible(LANDMARK.leftFoot)),
-    footAnchor(visible(LANDMARK.rightAnkle), visible(LANDMARK.rightFoot)),
-  ].filter(Boolean)
+  const feetBySide = {
+    left: footAnchor(visible(LANDMARK.leftAnkle), visible(LANDMARK.leftFoot)),
+    right: footAnchor(visible(LANDMARK.rightAnkle), visible(LANDMARK.rightFoot)),
+  }
+  const feet = Object.values(feetBySide).filter(Boolean)
   const torsoPoints = [
     visible(LANDMARK.leftShoulder),
     visible(LANDMARK.rightShoulder),
     visible(LANDMARK.leftHip),
     visible(LANDMARK.rightHip),
   ].filter(Boolean)
-  const legSegments = [
-    [visible(LANDMARK.leftHip), visible(LANDMARK.leftKnee)],
-    [visible(LANDMARK.leftKnee), visible(LANDMARK.leftAnkle)],
-    [visible(LANDMARK.rightHip), visible(LANDMARK.rightKnee)],
-    [visible(LANDMARK.rightKnee), visible(LANDMARK.rightAnkle)],
-  ].filter(([start, end]) => start && end)
+  const legSegmentsBySide = {
+    left: [
+      [visible(LANDMARK.leftHip), visible(LANDMARK.leftKnee)],
+      [visible(LANDMARK.leftKnee), visible(LANDMARK.leftAnkle)],
+    ].filter(([start, end]) => start && end),
+    right: [
+      [visible(LANDMARK.rightHip), visible(LANDMARK.rightKnee)],
+      [visible(LANDMARK.rightKnee), visible(LANDMARK.rightAnkle)],
+    ].filter(([start, end]) => start && end),
+  }
+  const legSegments = Object.values(legSegmentsBySide).flat()
   const armSegments = [
     [visible(LANDMARK.leftShoulder), visible(LANDMARK.leftElbow)],
     [visible(LANDMARK.leftElbow), visible(LANDMARK.leftWrist)],
@@ -290,8 +378,10 @@ function bodyAnchors(landmarks, bounds) {
     ankleY: Math.max(kneeY + height * 0.06, ankleY),
     headBottom: shoulderY - height * 0.045,
     feet,
+    feetBySide,
     torsoPoints,
     legSegments,
+    legSegmentsBySide,
     armSegments,
     bounds,
   }
@@ -438,6 +528,28 @@ function inLegArea(x, y, anchors, personWidth) {
   )
 }
 
+/** 正面写真で、人物自身の左右それぞれに最も近い脚だけを選ぶ。 */
+function inLegSideArea(x, y, anchors, personWidth, side) {
+  const target = anchors.legSegmentsBySide[side]
+  const other = anchors.legSegmentsBySide[side === 'left' ? 'right' : 'left']
+  const radius = Math.max(personWidth * 0.13, 0.027)
+  if (target.length) {
+    const distance = segmentSetDistance(x, y, target)
+    const otherDistance = other.length ? segmentSetDistance(x, y, other) : Infinity
+    return distance <= radius && distance <= otherDistance
+  }
+
+  // 正面写真では人物の左側は画像の右側に写る。
+  const centerX = (anchors.bounds.left + anchors.bounds.right) / 2
+  return side === 'left' ? x >= centerX : x < centerX
+}
+
+function segmentSetDistance(x, y, segments) {
+  return Math.min(...segments.map(([start, end]) =>
+    distanceToSegment(x, y, start.x, start.y, end.x, end.y),
+  ))
+}
+
 function inArmArea(x, y, anchors, personWidth) {
   if (!anchors.armSegments.length) return false
   const radius = Math.max(personWidth * 0.105, 0.022)
@@ -467,6 +579,77 @@ function inFootArea(x, y, anchors, personWidth, personHeight) {
     && y <= anchors.bounds.bottom + personHeight * 0.025
 }
 
+/** 左右の靴が近い場合も、同じ画素を両方の切り抜きへ重複させない。 */
+function inFootSideArea(x, y, anchors, personWidth, personHeight, side) {
+  const radiusX = Math.max(personWidth * 0.16, 0.035)
+  const radiusY = Math.max(personHeight * 0.075, 0.035)
+  const target = anchors.feetBySide[side]
+  const other = anchors.feetBySide[side === 'left' ? 'right' : 'left']
+  if (target) {
+    const distance = ((x - target.x) / radiusX) ** 2 + ((y - target.y) / radiusY) ** 2
+    const otherDistance = other
+      ? ((x - other.x) / radiusX) ** 2 + ((y - other.y) / radiusY) ** 2
+      : Infinity
+    return distance <= 1 && distance <= otherDistance
+  }
+
+  const centerX = (anchors.bounds.left + anchors.bounds.right) / 2
+  return inFootArea(x, y, anchors, personWidth, personHeight)
+    && (side === 'left' ? x >= centerX : x < centerX)
+}
+
+/** 腰から足首までの位置関係を維持した、片脚の正面投影窓。 */
+function legProjectionWindow(anchors, personWidth, personHeight, side) {
+  const segments = anchors.legSegmentsBySide[side]
+  const radius = Math.max(personWidth * 0.13, 0.027)
+  let left
+  let right
+  if (segments.length) {
+    const points = segments.flat()
+    left = Math.min(...points.map((point) => point.x)) - radius
+    right = Math.max(...points.map((point) => point.x)) + radius
+  } else {
+    const centerX = (anchors.bounds.left + anchors.bounds.right) / 2
+    left = side === 'left' ? centerX : anchors.bounds.left
+    right = side === 'left' ? anchors.bounds.right : centerX
+  }
+  const top = anchors.hipY - personHeight * 0.025
+  const bottom = anchors.ankleY - personHeight * 0.015
+  return clippedWindow(left, top, right, bottom)
+}
+
+/** 足首とつま先の周囲だけを、片方の靴の正面投影窓にする。 */
+function footProjectionWindow(anchors, personWidth, personHeight, side) {
+  const radiusX = Math.max(personWidth * 0.16, 0.035)
+  const radiusY = Math.max(personHeight * 0.075, 0.035)
+  const foot = anchors.feetBySide[side]
+  if (foot) {
+    return clippedWindow(
+      foot.x - radiusX,
+      foot.y - radiusY,
+      foot.x + radiusX,
+      foot.y + radiusY,
+    )
+  }
+  const centerX = (anchors.bounds.left + anchors.bounds.right) / 2
+  const left = side === 'left' ? centerX : anchors.bounds.left
+  const right = side === 'left' ? anchors.bounds.right : centerX
+  return clippedWindow(
+    left,
+    anchors.ankleY - personHeight * 0.045,
+    right,
+    anchors.bounds.bottom + personHeight * 0.025,
+  )
+}
+
+function clippedWindow(left, top, right, bottom) {
+  const x0 = Math.max(0, Math.min(0.999, left))
+  const y0 = Math.max(0, Math.min(0.999, top))
+  const x1 = Math.max(x0 + 0.001, Math.min(1, right))
+  const y1 = Math.max(y0 + 0.001, Math.min(1, bottom))
+  return [x0, y0, x1 - x0, y1 - y0]
+}
+
 /** アトラス転写側の窓配置に合わせ、左右16%を袖・側面用の不透明な生地にする。 */
 function composeShirtTexture(torso, fabricColor) {
   const width = Math.max(3, Math.ceil(torso.width / 0.68))
@@ -482,6 +665,51 @@ function composeShirtTexture(torso, fabricColor) {
   ctx.imageSmoothingEnabled = true
   ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(torso, 0, 0, torso.width, torso.height, sideWidth, 0, torsoWidth, height)
+  return canvas
+}
+
+/**
+ * 透明な切り抜きをUV領域と同じ比率へ収める。余白を代表色で先に埋めることで、
+ * 写真の輪郭そのものをタイル状に繰り返さず、正面投影だけを連続して使える。
+ */
+function normalizedRegionTexture(image, fabricColor, width, height, sourceWindow = null) {
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = fabricColor
+  ctx.fillRect(0, 0, width, height)
+  if (!image) return canvas
+
+  if (sourceWindow) {
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(
+      image,
+      image.width * sourceWindow[0],
+      image.height * sourceWindow[1],
+      Math.max(1, image.width * sourceWindow[2]),
+      Math.max(1, image.height * sourceWindow[3]),
+      0,
+      0,
+      width,
+      height,
+    )
+    return canvas
+  }
+
+  const scale = Math.min(width / image.width, height / image.height)
+  const drawWidth = image.width * scale
+  const drawHeight = image.height * scale
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(
+    image,
+    (width - drawWidth) / 2,
+    (height - drawHeight) / 2,
+    drawWidth,
+    drawHeight,
+  )
   return canvas
 }
 

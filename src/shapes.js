@@ -4,7 +4,7 @@
  *
  * 座標系はスケルトンと同じ（Y-up、キャラクターは+Zを向く、左手が+X）。
  */
-import { UV_SETS, uvRect } from './atlas.js'
+import { UV_SETS, uvRect } from './atlas.js?v=20260805-16'
 
 /** 箱の6面。外側から見て反時計回りになる順に4隅の符号を並べてある。 */
 const BOX_FACES = {

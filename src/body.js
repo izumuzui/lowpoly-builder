@@ -13,13 +13,19 @@
  */
 import * as THREE from 'three'
 import { createSkeleton, BONE_PREFIX } from './skeleton.js'
-import { appendBox, appendRings, appendWedge, DETAIL_LEVELS, DETAIL_ORDER } from './shapes.js'
+import { appendBox, appendRings, appendWedge, DETAIL_LEVELS, DETAIL_ORDER } from './shapes.js?v=20260805-16'
 
 /** part.shape が指す形状の生成関数。既定は box。 */
 const SHAPES = {
   box: appendBox,
   rings: appendRings,
   wedge: appendWedge,
+}
+
+/** 左パーツを複製した右パーツだけ、対応する写真領域へ切り替える。 */
+const MIRRORED_UV_SETS = {
+  legsLeft: 'legsRight',
+  shoeLeft: 'shoeRight',
 }
 
 export async function loadBodyList(baseUrl = './bodies') {
@@ -119,6 +125,7 @@ function expandParts(parts) {
       // Left系なら対のボーンへ、中央のボーン（耳など）なら同じボーンのまま左右に置く
       bone: bone.startsWith('Left') ? bone.replace('Left', 'Right') : bone,
       offset: [-offset[0], offset[1], offset[2]],
+      uvSet: MIRRORED_UV_SETS[part.uvSet] ?? part.uvSet,
       mirror: false,
     }
 
