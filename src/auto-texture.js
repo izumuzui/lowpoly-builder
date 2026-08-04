@@ -6,7 +6,7 @@ import {
   MEDIAPIPE_VISION_MODULE,
   MEDIAPIPE_WASM_BASE,
   SELFIE_MULTICLASS_MODEL,
-} from './config.js?v=20260804-12'
+} from './config.js?v=20260804-13'
 
 const CATEGORY = {
   background: 0,
@@ -71,7 +71,7 @@ export async function segmentPerson(image) {
 
 function segmentationWorker() {
   if (worker) return worker
-  worker = new Worker(new URL('./auto-texture-worker.js?v=20260804-12', import.meta.url))
+  worker = new Worker(new URL('./auto-texture-worker.js?v=20260804-13', import.meta.url))
   worker.addEventListener('message', (event) => {
     const request = requests.get(event.data.id)
     if (!request) return
@@ -169,32 +169,16 @@ export function createAutomaticTextureParts(image, segmentation, {
     if (part) parts[name] = part
   }
 
-  // 顔は検出した目を基準に貼るため、切り詰めず元画像と同じ比率のcanvasを使う。
+  // 顔は全身写真でも解像度を落とさないよう、元画像から頭部だけを直接切り出す。
   if (facing === 'front' && resolvedFaceDetection) {
-    const facePredicate = (category, x, y) =>
-      (category === CATEGORY.hair
-        || category === CATEGORY.bodySkin
-        || category === CATEGORY.faceSkin)
-      && inHeadArea(x, y, resolvedFaceDetection, sourceWidth, sourceHeight, personBounds)
-    const face = maskedPart(
-      pixels,
-      categoryPlane,
-      width,
-      height,
-      facePredicate,
+    const face = createFacePart(
+      image,
+      segmentation,
+      resolvedFaceDetection,
       sourceWidth,
       sourceHeight,
-      { crop: false },
     )
-    if (face) {
-      face.sourceDetection = resolvedFaceDetection
-      face.detection = scaleFaceDetection(
-        resolvedFaceDetection,
-        width / sourceWidth,
-        height / sourceHeight,
-      )
-      parts.face = face
-    }
+    if (face) parts.face = face
   }
 
   return { facing, parts, personBounds }
@@ -351,7 +335,7 @@ function faceDetectionFromPose(landmarks, sourceWidth, sourceHeight) {
     sourceWidth,
     sourceHeight,
   )
-  return box ? { eyes: pixelEyes, box } : null
+  return box ? { eyes: pixelEyes, box, method: 'pose' } : null
 }
 
 function faceDetectionFromMask(segmentation, sourceWidth, sourceHeight, personBounds) {
@@ -404,7 +388,7 @@ function faceDetectionFromMask(segmentation, sourceWidth, sourceHeight, personBo
     sourceWidth,
     sourceHeight,
   )
-  return box ? { eyes, box } : null
+  return box ? { eyes, box, method: 'mask' } : null
 }
 
 function clippedBox(x, y, width, height, sourceWidth, sourceHeight) {
@@ -464,16 +448,148 @@ function inFootArea(x, y, anchors, personWidth, personHeight) {
     && y <= anchors.bounds.bottom + personHeight * 0.025
 }
 
-function inHeadArea(x, y, detection, sourceWidth, sourceHeight, personBounds) {
+/**
+ * 元画像の解像度を保った頭部canvasを作る。
+ * セグメンテーションが小さい顔を消した場合は、検出枠の楕円をマスクとして使う。
+ */
+function createFacePart(image, segmentation, detection, sourceWidth, sourceHeight) {
   const box = detection.box
-  if (!box) {
-    return y <= personBounds.top + (personBounds.bottom - personBounds.top) * 0.25
+  if (!box) return null
+  const crop = clippedBox(
+    box.originX - box.width * 0.42,
+    box.originY - box.height * 0.48,
+    box.width * 1.84,
+    box.height * 1.72,
+    sourceWidth,
+    sourceHeight,
+  )
+  if (!crop) return null
+
+  const scale = Math.min(1, MAX_WORK_SIZE / Math.max(crop.width, crop.height))
+  const width = Math.max(2, Math.round(crop.width * scale))
+  const height = Math.max(2, Math.round(crop.height * scale))
+  const scaleX = width / crop.width
+  const scaleY = height / crop.height
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(
+    image,
+    crop.originX,
+    crop.originY,
+    crop.width,
+    crop.height,
+    0,
+    0,
+    width,
+    height,
+  )
+
+  const pixels = ctx.getImageData(0, 0, width, height)
+  const categoryMask = faceCategoryMask(
+    segmentation,
+    crop,
+    width,
+    height,
+    sourceWidth,
+    sourceHeight,
+  )
+  const segmentedPixels = categoryMask.reduce((sum, value) => sum + value, 0)
+  const minimumSegmentedPixels = Math.max(6, Math.round(width * height * 0.008))
+  const useSegmentation = segmentedPixels >= minimumSegmentedPixels
+  let pixelCount = 0
+
+  for (let y = 0; y < height; y += 1) {
+    const sourceY = crop.originY + (y + 0.5) / scaleY
+    for (let x = 0; x < width; x += 1) {
+      const index = y * width + x
+      const sourceX = crop.originX + (x + 0.5) / scaleX
+      const keep = useSegmentation
+        ? categoryMask[index] === 1
+        : inFaceOval(sourceX, sourceY, detection)
+      if (keep) {
+        pixelCount += 1
+      } else {
+        pixels.data[index * 4 + 3] = 0
+      }
+    }
   }
-  const left = Math.max(0, (box.originX - box.width * 0.28) / sourceWidth)
-  const right = Math.min(1, (box.originX + box.width * 1.28) / sourceWidth)
-  const top = Math.max(0, (box.originY - box.height * 0.42) / sourceHeight)
-  const bottom = Math.min(1, (box.originY + box.height * 1.16) / sourceHeight)
-  return x >= left && x <= right && y >= top && y <= bottom
+  if (!pixelCount) return null
+  ctx.putImageData(pixels, 0, 0)
+
+  return {
+    canvas,
+    selection: { mode: 'auto' },
+    sourceRect: { x: crop.originX, y: crop.originY, w: crop.width, h: crop.height },
+    pixelCount,
+    maskMode: useSegmentation ? 'segmentation' : 'oval',
+    sourceDetection: detection,
+    detection: cropFaceDetection(detection, crop, scaleX, scaleY),
+  }
+}
+
+function faceCategoryMask(
+  segmentation,
+  crop,
+  width,
+  height,
+  sourceWidth,
+  sourceHeight,
+) {
+  const output = new Uint8Array(width * height)
+  const maskWidth = segmentation?.width
+  const maskHeight = segmentation?.height
+  const categories = segmentation?.categories
+  if (!maskWidth || !maskHeight || categories?.length < maskWidth * maskHeight) return output
+
+  const scaleX = width / crop.width
+  const scaleY = height / crop.height
+  for (let y = 0; y < height; y += 1) {
+    const sourceY = crop.originY + (y + 0.5) / scaleY
+    const maskY = Math.min(maskHeight - 1, Math.floor(sourceY * maskHeight / sourceHeight))
+    for (let x = 0; x < width; x += 1) {
+      const sourceX = crop.originX + (x + 0.5) / scaleX
+      const maskX = Math.min(maskWidth - 1, Math.floor(sourceX * maskWidth / sourceWidth))
+      const category = categories[maskY * maskWidth + maskX]
+      if (category === CATEGORY.hair
+        || category === CATEGORY.bodySkin
+        || category === CATEGORY.faceSkin) {
+        output[y * width + x] = 1
+      }
+    }
+  }
+  return output
+}
+
+function inFaceOval(x, y, detection) {
+  const { box } = detection
+  const fromPose = detection.method === 'pose'
+  const centerX = box.originX + box.width * 0.5
+  const centerY = box.originY + box.height * (fromPose ? 0.42 : 0.48)
+  const radiusX = Math.max(1, box.width * (fromPose ? 0.46 : 0.53))
+  const radiusY = Math.max(1, box.height * (fromPose ? 0.55 : 0.58))
+  return ((x - centerX) / radiusX) ** 2 + ((y - centerY) / radiusY) ** 2 <= 1
+}
+
+function cropFaceDetection(detection, crop, scaleX, scaleY) {
+  return {
+    method: detection.method,
+    eyes: detection.eyes.map((eye) => ({
+      x: (eye.x - crop.originX) * scaleX,
+      y: (eye.y - crop.originY) * scaleY,
+    })),
+    box: detection.box
+      ? {
+          originX: (detection.box.originX - crop.originX) * scaleX,
+          originY: (detection.box.originY - crop.originY) * scaleY,
+          width: detection.box.width * scaleX,
+          height: detection.box.height * scaleY,
+        }
+      : null,
+  }
 }
 
 function maskedPart(
@@ -556,19 +672,5 @@ function maskedPart(
     selection: { mode: 'rect', rect: sourceRect, rectSpace: 'image' },
     sourceRect,
     pixelCount: count,
-  }
-}
-
-function scaleFaceDetection(detection, scaleX, scaleY) {
-  return {
-    eyes: detection.eyes.map((eye) => ({ x: eye.x * scaleX, y: eye.y * scaleY })),
-    box: detection.box
-      ? {
-          originX: detection.box.originX * scaleX,
-          originY: detection.box.originY * scaleY,
-          width: detection.box.width * scaleX,
-          height: detection.box.height * scaleY,
-        }
-      : null,
   }
 }

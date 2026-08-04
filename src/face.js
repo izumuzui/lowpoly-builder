@@ -5,7 +5,7 @@
  * リアルな顔がカクカクの体に乗る違和感（狙いの質感）を残す。
  * 128pxまで落とすため、切り抜きの粗さはむしろ味になる。
  */
-import { MEDIAPIPE_WASM_BASE, FACE_DETECTOR_MODEL } from './config.js?v=20260804-12'
+import { MEDIAPIPE_WASM_BASE, FACE_DETECTOR_MODEL } from './config.js?v=20260804-13'
 import { region, quantize15bit, drawPlaceholderFace, FACE_ANCHOR } from './atlas.js'
 
 const { eyeSpan: EYE_SPAN, eyeLine: EYE_LINE } = FACE_ANCHOR

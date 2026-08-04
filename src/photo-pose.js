@@ -3,7 +3,7 @@
  * 推論はブラウザ内のCPUだけで行い、画像を外部へ送信しない。
  */
 import * as THREE from 'three'
-import { MEDIAPIPE_WASM_BASE, POSE_LANDMARKER_MODEL } from './config.js?v=20260804-12'
+import { MEDIAPIPE_WASM_BASE, POSE_LANDMARKER_MODEL } from './config.js?v=20260804-13'
 import { BONE_PREFIX } from './skeleton.js'
 import { applyPose } from './poses.js'
 
