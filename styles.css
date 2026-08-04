@@ -279,6 +279,20 @@ code {
   background: var(--surface-raised-hover);
 }
 
+.photo-pose {
+  display: grid;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+}
+
+.photo-pose .button {
+  width: 100%;
+}
+
+.photo-pose__note {
+  margin: 0;
+}
+
 .slot-heading {
   margin-top: var(--space-md);
   margin-bottom: var(--space-xs);

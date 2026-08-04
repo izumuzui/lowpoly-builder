@@ -2,6 +2,7 @@ import { createViewer } from './viewer.js'
 import { createAtlas, region, paintSlot, setAtlasScale } from './atlas.js'
 import { loadBodyList, loadBodySpec, buildBody } from './body.js'
 import { decodeImage, detectFace, paintFace, paintFaceCrop, sampleSkinTone, shadeOf } from './face.js'
+import { applyPhotoPose, detectPhotoPose } from './photo-pose.js'
 import { openCropper } from './cropper.js'
 import { POSES, applyPose } from './poses.js'
 import { TOPS, BOTTOMS } from './clothing.js'
@@ -31,6 +32,8 @@ const BACKDROPS = [
   { id: 'light', name: '白' },
 ]
 
+const DETECTED_POSE_ID = 'detectedPose'
+
 /** 顔と、それ以外で選べる方法が変わる。 */
 const CROP_MODES = {
   face: [
@@ -58,6 +61,8 @@ const el = {
   sourceNote: document.getElementById('source-note'),
   sourceAdd: document.getElementById('source-add'),
   sourceInput: document.getElementById('source-input'),
+  photoPoseApply: document.getElementById('photo-pose-apply'),
+  photoPoseNote: document.getElementById('photo-pose-note'),
   slotList: document.getElementById('slot-list'),
   slotNote: document.getElementById('slot-note'),
   bodyList: document.getElementById('body-list'),
@@ -90,6 +95,8 @@ const state = {
   look: { ...DEFAULT_LOOK },
   detail: 'normal',
   pose: 'tpose',
+  detectedPose: null,
+  poseBusy: false,
   top: 'tshirt',
   bottom: 'pants',
   backdrop: 'dark',
@@ -152,7 +159,7 @@ function rebuild({ reframe = false } = {}) {
     extras: [...(top?.extras ?? []), ...(bottom?.extras ?? [])],
   })
   applyLook(state.mesh, state.look)
-  applyPose(state.mesh, state.pose)
+  applyCurrentPose()
   state.viewer.setModel(state.mesh)
   state.viewer.setBackdrop(state.backdrop)
   state.viewer.setBackgroundImage(state.slots.background?.image ?? null)
@@ -173,9 +180,20 @@ function mergeOverrides(...groups) {
 
 function reportModel() {
   const triangles = state.mesh.geometry.attributes.position.count / 3
+  const poseName = state.pose === DETECTED_POSE_ID
+    ? '写真から読み取り'
+    : (POSES[state.pose] ?? POSES.tpose).name
   setStatus(
-    `${state.spec.name} / ${POSES[state.pose].name} / ${triangles}ポリゴン / 身長${state.spec.height}m`,
+    `${state.spec.name} / ${poseName} / ${triangles}ポリゴン / 身長${state.spec.height}m`,
   )
+}
+
+function applyCurrentPose() {
+  if (state.pose === DETECTED_POSE_ID && state.detectedPose) {
+    return applyPhotoPose(state.mesh, state.detectedPose)
+  }
+  applyPose(state.mesh, state.pose)
+  return null
 }
 
 /* ---------- 画像スロット ---------- */
@@ -234,6 +252,15 @@ function renderSources() {
   el.slotNote.textContent = selected
     ? `「${selected.name}」から切り出す部位を選んでください。`
     : '素材画像を選んでから、切り出す部位を選んでください。'
+  el.photoPoseApply.disabled = !selected || state.poseBusy
+  el.photoPoseApply.textContent = state.poseBusy
+    ? '3D姿勢を読み取り中…'
+    : selected?.poseDetection
+      ? 'この写真のポーズを再反映'
+      : '選択中の写真からポーズを反映'
+  el.photoPoseNote.textContent = selected?.poseDetection
+    ? `「${selected.name}」から${selected.poseDetection.visibleLandmarks}点を検出済みです。`
+    : '全身が写った写真を選ぶと、端末内のCPUで3D姿勢を読み取れます。'
   drawSourcePreviews()
 }
 
@@ -496,13 +523,43 @@ function removeSource(id) {
   }
 
   usedBy.forEach(releaseSlot)
+  if (state.detectedPose?.sourceId === id) {
+    state.detectedPose = null
+    if (state.pose === DETECTED_POSE_ID) state.pose = 'tpose'
+  }
   source.image.close?.()
   state.sources = state.sources.filter((item) => item.id !== id)
   if (state.activeSourceId === id) state.activeSourceId = state.sources[0]?.id ?? null
   rebuild()
   renderSources()
   renderSlots()
+  renderPoseChips()
   reportModel()
+}
+
+async function applyPoseFromActiveSource() {
+  const source = activeSource()
+  if (!source || state.poseBusy) return
+
+  state.poseBusy = true
+  renderSources()
+  setStatus('写真から3D姿勢を読み取っています')
+  try {
+    source.poseDetection ??= await detectPhotoPose(source.image)
+    state.detectedPose = { ...source.poseDetection, sourceId: source.id }
+    state.pose = DETECTED_POSE_ID
+    const applied = applyCurrentPose()
+    renderPoseChips()
+    state.viewer.frame(state.mesh)
+    const confidence = Math.round(source.poseDetection.confidence * 100)
+    setStatus(`写真の3D姿勢を反映しました (${applied.appliedBones}ボーン / 信頼度${confidence}%)`)
+  } catch (error) {
+    console.error(error)
+    setStatus(`姿勢を読み取れませんでした: ${error.message}`, 'error')
+  } finally {
+    state.poseBusy = false
+    renderSources()
+  }
 }
 
 /** ドラッグ&ドロップの受け口。タイルにもステージにも同じ挙動をつける。 */
@@ -536,6 +593,7 @@ function wireSlots() {
     pendingSlot = null
     el.sourceInput.click()
   })
+  el.photoPoseApply.addEventListener('click', () => void applyPoseFromActiveSource())
   el.sourceInput.addEventListener('change', async () => {
     const files = [...(el.sourceInput.files ?? [])]
     const target = pendingSlot
@@ -574,10 +632,11 @@ function renderBodyChips() {
 
 function renderPoseChips() {
   const entries = Object.entries(POSES).map(([id, pose]) => ({ id, name: pose.name }))
+  if (state.detectedPose) entries.push({ id: DETECTED_POSE_ID, name: '写真から読み取り' })
   renderChips(el.poseList, entries, state.pose, (id) => {
     state.pose = id
     // ジオメトリは作り直さずボーンだけ動かす
-    applyPose(state.mesh, state.pose)
+    applyCurrentPose()
     renderPoseChips()
     reportModel()
   })

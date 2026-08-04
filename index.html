@@ -77,6 +77,14 @@
           </div>
           <ul class="sources" id="source-list" aria-label="素材画像"></ul>
           <p class="note" id="source-note">1枚でも複数でもまとめて追加できます。</p>
+          <div class="photo-pose">
+            <button class="button" id="photo-pose-apply" type="button" disabled>
+              選択中の写真からポーズを反映
+            </button>
+            <p class="note photo-pose__note" id="photo-pose-note">
+              全身が写った写真を選ぶと、端末内のCPUで3D姿勢を読み取れます。
+            </p>
+          </div>
           <input type="file" id="source-input" accept="image/*" multiple hidden />
 
           <h3 class="group__title slot-heading">貼り付け先</h3>
