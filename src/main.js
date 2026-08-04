@@ -1,9 +1,9 @@
 import { createViewer } from './viewer.js'
 import { createAtlas, region, paintSlot, setAtlasScale } from './atlas.js'
 import { loadBodyList, loadBodySpec, buildBody } from './body.js'
-import { decodeImage, detectFace, paintFace, paintFaceCrop, sampleSkinTone, shadeOf } from './face.js?v=20260804-11'
-import { applyPhotoPose, detectPhotoPose } from './photo-pose.js?v=20260804-11'
-import { createAutomaticTextureParts, segmentPerson } from './auto-texture.js?v=20260804-11'
+import { decodeImage, detectFace, paintFace, paintFaceCrop, sampleSkinTone, shadeOf } from './face.js?v=20260804-12'
+import { applyPhotoPose, detectPhotoPose } from './photo-pose.js?v=20260804-12'
+import { createAutomaticTextureParts, segmentPerson } from './auto-texture.js?v=20260804-12'
 import { openCropper } from './cropper.js'
 import { POSES, applyPose } from './poses.js'
 import { TOPS, BOTTOMS } from './clothing.js'
@@ -617,6 +617,10 @@ async function applyAutomaticTextureFromActiveSource() {
       poseDetection: source.poseDetection,
       faceDetection: source.detection,
     })
+    if (!source.detection && analysis.parts.face?.sourceDetection) {
+      // 顔専用検出が失敗した写真でも、姿勢点または顔マスクの補完結果を手動調整で再利用する。
+      source.detection = analysis.parts.face.sourceDetection
+    }
     const assignments = analysis.facing === 'front'
       ? [
           ['face', 'face'],
@@ -642,7 +646,9 @@ async function applyAutomaticTextureFromActiveSource() {
         sourceId: source.id,
         selection: part.selection,
         detection: slot?.detect ? part.detection : null,
-        skinTone: slotId === 'face' ? sampleSkinTone(source.image, source.detection) : undefined,
+        skinTone: slotId === 'face'
+          ? sampleSkinTone(source.image, part.sourceDetection ?? source.detection)
+          : undefined,
         automatic: true,
       }
       applied.push({ id: slotId, label: slot?.label ?? slotId })

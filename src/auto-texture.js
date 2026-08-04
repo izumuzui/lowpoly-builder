@@ -6,7 +6,7 @@ import {
   MEDIAPIPE_VISION_MODULE,
   MEDIAPIPE_WASM_BASE,
   SELFIE_MULTICLASS_MODEL,
-} from './config.js?v=20260804-11'
+} from './config.js?v=20260804-12'
 
 const CATEGORY = {
   background: 0,
@@ -71,7 +71,7 @@ export async function segmentPerson(image) {
 
 function segmentationWorker() {
   if (worker) return worker
-  worker = new Worker(new URL('./auto-texture-worker.js?v=20260804-11', import.meta.url))
+  worker = new Worker(new URL('./auto-texture-worker.js?v=20260804-12', import.meta.url))
   worker.addEventListener('message', (event) => {
     const request = requests.get(event.data.id)
     if (!request) return
@@ -124,8 +124,15 @@ export function createAutomaticTextureParts(image, segmentation, {
   if (!personBounds) throw new Error('人物の領域を検出できませんでした')
 
   const anchors = bodyAnchors(poseDetection?.landmarks, personBounds)
-  const faceVisible = faceDetection || frontFaceVisible(poseDetection?.landmarks)
-  const facing = faceVisible ? 'front' : 'back'
+  const resolvedFaceDetection = resolveAutomaticFaceDetection({
+    faceDetection,
+    poseLandmarks: poseDetection?.landmarks,
+    segmentation,
+    sourceWidth,
+    sourceHeight,
+    personBounds,
+  })
+  const facing = resolvedFaceDetection ? 'front' : 'back'
   // 小物(others)を混ぜると、手や動画UIまで服へ誤転写されやすい。
   // 上下の服はclothesだけに絞り、靴だけ小物カテゴリも許可する。
   const clothes = (category) => category === CATEGORY.clothes
@@ -163,12 +170,12 @@ export function createAutomaticTextureParts(image, segmentation, {
   }
 
   // 顔は検出した目を基準に貼るため、切り詰めず元画像と同じ比率のcanvasを使う。
-  if (facing === 'front' && faceDetection) {
+  if (facing === 'front' && resolvedFaceDetection) {
     const facePredicate = (category, x, y) =>
       (category === CATEGORY.hair
         || category === CATEGORY.bodySkin
         || category === CATEGORY.faceSkin)
-      && inHeadArea(x, y, faceDetection, sourceWidth, sourceHeight, personBounds)
+      && inHeadArea(x, y, resolvedFaceDetection, sourceWidth, sourceHeight, personBounds)
     const face = maskedPart(
       pixels,
       categoryPlane,
@@ -180,7 +187,12 @@ export function createAutomaticTextureParts(image, segmentation, {
       { crop: false },
     )
     if (face) {
-      face.detection = scaleFaceDetection(faceDetection, width / sourceWidth, height / sourceHeight)
+      face.sourceDetection = resolvedFaceDetection
+      face.detection = scaleFaceDetection(
+        resolvedFaceDetection,
+        width / sourceWidth,
+        height / sourceHeight,
+      )
       parts.face = face
     }
   }
@@ -289,12 +301,121 @@ function footAnchor(ankle, toe) {
   return { x: (ankle.x + toe.x) / 2, y: (ankle.y + toe.y) / 2 }
 }
 
-function frontFaceVisible(landmarks) {
-  const indices = [LANDMARK.nose, LANDMARK.leftEye, LANDMARK.rightEye]
-  return indices.filter((index) => {
+/**
+ * 顔専用検出が取れなくても、姿勢の両目、最後に顔カテゴリのマスクから貼り付け位置を補う。
+ * 返す座標はすべて元画像のピクセル座標。
+ */
+export function resolveAutomaticFaceDetection({
+  faceDetection = null,
+  poseLandmarks = null,
+  segmentation = null,
+  sourceWidth,
+  sourceHeight,
+  personBounds = null,
+}) {
+  if (validFaceDetection(faceDetection)) return faceDetection
+  return faceDetectionFromPose(poseLandmarks, sourceWidth, sourceHeight)
+    ?? faceDetectionFromMask(segmentation, sourceWidth, sourceHeight, personBounds)
+}
+
+function validFaceDetection(detection) {
+  return detection?.eyes?.length >= 2
+    && detection.eyes.every((eye) => Number.isFinite(eye.x) && Number.isFinite(eye.y))
+}
+
+function faceDetectionFromPose(landmarks, sourceWidth, sourceHeight) {
+  const visible = (index) => {
     const point = landmarks?.[index]
-    return point && Math.min(point.visibility ?? 1, point.presence ?? 1) >= 0.45
-  }).length >= 2
+    return point && Math.min(point.visibility ?? 1, point.presence ?? 1) >= 0.35
+      ? point
+      : null
+  }
+  const eyes = [visible(LANDMARK.leftEye), visible(LANDMARK.rightEye)]
+  if (eyes.some((eye) => !eye)) return null
+
+  const pixelEyes = eyes
+    .map((eye) => ({ x: eye.x * sourceWidth, y: eye.y * sourceHeight }))
+    .sort((a, b) => a.x - b.x)
+  const [left, right] = pixelEyes
+  const eyeSpan = Math.hypot(right.x - left.x, right.y - left.y)
+  const minimumSpan = Math.max(1, Math.min(sourceWidth, sourceHeight) * 0.002)
+  if (!Number.isFinite(eyeSpan) || eyeSpan < minimumSpan) return null
+
+  const centerX = (left.x + right.x) / 2
+  const centerY = (left.y + right.y) / 2
+  const box = clippedBox(
+    centerX - eyeSpan * 1.35,
+    centerY - eyeSpan * 0.95,
+    eyeSpan * 2.7,
+    eyeSpan * 3.2,
+    sourceWidth,
+    sourceHeight,
+  )
+  return box ? { eyes: pixelEyes, box } : null
+}
+
+function faceDetectionFromMask(segmentation, sourceWidth, sourceHeight, personBounds) {
+  const maskWidth = segmentation?.width
+  const maskHeight = segmentation?.height
+  const categories = segmentation?.categories
+  if (!maskWidth || !maskHeight || categories?.length < maskWidth * maskHeight) return null
+
+  const personTop = personBounds?.top ?? 0
+  const personHeight = (personBounds?.bottom ?? 1) - personTop
+  const headLimit = personTop + personHeight * 0.32
+  let left = maskWidth
+  let top = maskHeight
+  let right = -1
+  let bottom = -1
+  let count = 0
+  for (let y = 0; y < maskHeight; y += 1) {
+    const normalizedY = (y + 0.5) / maskHeight
+    if (normalizedY > headLimit) break
+    for (let x = 0; x < maskWidth; x += 1) {
+      if (categories[y * maskWidth + x] !== CATEGORY.faceSkin) continue
+      count += 1
+      left = Math.min(left, x)
+      top = Math.min(top, y)
+      right = Math.max(right, x)
+      bottom = Math.max(bottom, y)
+    }
+  }
+
+  const minimumPixels = Math.max(8, Math.round(maskWidth * maskHeight * 0.00003))
+  if (count < minimumPixels || right < left || bottom < top) return null
+
+  const faceLeft = left * sourceWidth / maskWidth
+  const faceTop = top * sourceHeight / maskHeight
+  const faceWidth = (right - left + 1) * sourceWidth / maskWidth
+  const faceHeight = (bottom - top + 1) * sourceHeight / maskHeight
+  if (faceWidth < Math.max(2, sourceWidth * 0.005)
+    || faceHeight < Math.max(3, sourceHeight * 0.005)) return null
+
+  const eyeY = faceTop + faceHeight * 0.38
+  const eyes = [
+    { x: faceLeft + faceWidth * 0.32, y: eyeY },
+    { x: faceLeft + faceWidth * 0.68, y: eyeY },
+  ]
+  const box = clippedBox(
+    faceLeft - faceWidth * 0.12,
+    faceTop - faceHeight * 0.08,
+    faceWidth * 1.24,
+    faceHeight * 1.18,
+    sourceWidth,
+    sourceHeight,
+  )
+  return box ? { eyes, box } : null
+}
+
+function clippedBox(x, y, width, height, sourceWidth, sourceHeight) {
+  const left = Math.max(0, x)
+  const top = Math.max(0, y)
+  const right = Math.min(sourceWidth, x + width)
+  const bottom = Math.min(sourceHeight, y + height)
+  if (![left, top, right, bottom].every(Number.isFinite)
+    || right - left < 2
+    || bottom - top < 2) return null
+  return { originX: left, originY: top, width: right - left, height: bottom - top }
 }
 
 function inTorsoArea(x, anchors, personWidth) {
