@@ -235,7 +235,11 @@ export function appendRings(part, dimensions, boneIndex, buffers, detail = DETAI
       const quad = [rings[r][i], rings[r][next], rings[r + 1][next], rings[r + 1][i]]
       const facing = classify(i * step, basis)
       // 襟やフードは正面を開け、内側の顔・首・服を見せる
-      if (part.omitFacings?.includes(facing)) continue
+      const omitThreshold = part.omitFacingThreshold
+      const isNarrowOpening = facing === basis.bPos && omitThreshold != null
+      const shouldOmit = part.omitFacings?.includes(facing)
+        && (!isNarrowOpening || Math.cos(i * step) > omitThreshold)
+      if (shouldOmit) continue
       const uvOf = makeProjector(facing, uvSet[facing], dimensions)
       emitQuad(buffers, quad, uvOf, boneIndex)
     }
