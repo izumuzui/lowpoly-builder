@@ -1,8 +1,9 @@
 /**
  * 服の種類。パーツのUV領域と形を差し替える定義。
  *
- * body.js の overrides に渡すと、パーツの uvSet / scale / offsetDelta / profile が
- * 差し替わる。形は絶対値ではなく倍率で指定する。size は身長比で体型ごとに違うため、
+ * override は既存パーツの uvSet / scale / offsetDelta / profile を差し替える。
+ * extras は既存パーツを雛形に、襟・フード・裾などの服専用形状を追加する。
+ * 形は絶対値ではなく倍率で指定する。size は身長比で体型ごとに違うため、
  * 絶対値で書くと体型の数だけ用意する羽目になる。
  *
  * 袖丈は独立した設定にしていない。タンクトップの袖丈は意味を持たないため、
@@ -48,6 +49,29 @@ export const TOPS = [
       },
       upperArm: { scale: [1, 1.08, 1.08] },
     },
+    extras: [
+      {
+        from: 'Neck',
+        id: 'openCollar',
+        uvSet: 'clothShade',
+        uvGroup: null,
+        scale: [1.65, 0.55, 1.55],
+        offsetDelta: [0, -0.008, 0],
+        profile: [[0, 1.06, 1.04], [0.45, 1, 1], [1, 0.9, 0.92]],
+        omitFacings: ['pz'],
+      },
+      {
+        from: 'chest',
+        id: 'openLapel',
+        shape: 'box',
+        uvSet: 'clothShade',
+        uvGroup: null,
+        scale: [0.24, 0.62, 0.32],
+        offsetDelta: [0.045, 0.032, 0.078],
+        rotate: [0, 0, -18],
+        mirror: true,
+      },
+    ],
   },
   {
     id: 'longShirt',
@@ -86,6 +110,36 @@ export const TOPS = [
         profile: [[0, 1.04, 1.04], [0.38, 1, 1], [0.8, 0.98, 1], [1, 0.96, 0.98]],
       },
     },
+    extras: [
+      {
+        from: 'Head',
+        id: 'hood',
+        uvSet: 'clothShade',
+        uvGroup: null,
+        scale: [1.2, 0.92, 1.26],
+        offsetDelta: [0, -0.02, -0.025],
+        profile: [[0, 0.64, 0.68], [0.18, 0.92, 0.94], [0.52, 1.04, 1.06], [0.82, 1, 1.02], [1, 0.72, 0.76]],
+        omitFacings: ['pz'],
+      },
+      {
+        from: 'Neck',
+        id: 'hoodOpening',
+        uvSet: 'clothShade',
+        uvGroup: null,
+        scale: [2.45, 0.82, 2.2],
+        offsetDelta: [0, -0.008, -0.008],
+        profile: [[0, 1.08, 1.04], [0.45, 1, 1], [1, 0.82, 0.86]],
+      },
+      {
+        from: 'abdomen',
+        id: 'hoodiePocket',
+        shape: 'box',
+        uvSet: 'clothShade',
+        uvGroup: null,
+        scale: [0.62, 0.34, 0.18],
+        offsetDelta: [0, -0.025, 0.066],
+      },
+    ],
   },
   {
     id: 'jacket',
@@ -123,6 +177,20 @@ export const TOPS = [
         profile: [[0, 1.12, 1.08], [0.34, 1.06, 1.05], [0.72, 1, 1], [1, 0.96, 0.98]],
       },
     },
+    extras: [
+      {
+        from: 'pelvis',
+        id: 'coatPanel',
+        shape: 'box',
+        uvSet: 'clothShade',
+        uvGroup: null,
+        scale: [0.72, 3, 1.5],
+        offsetDelta: [0.064, -0.105, 0],
+        taperAxis: 'y',
+        taper: [1.18, 0.9],
+        mirror: true,
+      },
+    ],
   },
   {
     id: 'lightArmor',

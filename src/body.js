@@ -38,7 +38,7 @@ export async function loadBodySpec(id, baseUrl = './bodies') {
  * @param {ReturnType<import('./atlas.js').createAtlas>} atlas
  * @returns {THREE.SkinnedMesh}
  */
-export function buildBody(spec, atlas, { detail = 'normal', overrides = {} } = {}) {
+export function buildBody(spec, atlas, { detail = 'normal', overrides = {}, extras = [] } = {}) {
   const height = spec.height ?? 1.7
   const level = DETAIL_LEVELS[detail] ?? DETAIL_LEVELS.normal
   const { skeleton, root, boneIndex, rest } = createSkeleton({
@@ -48,10 +48,15 @@ export function buildBody(spec, atlas, { detail = 'normal', overrides = {} } = {
 
   // 細かさが上がるとパーツが増える。肩・耳・指などは一定の段階から現れる
   const budget = DETAIL_ORDER.indexOf(detail)
-  const visible = (spec.parts ?? [])
+  const baseParts = spec.parts ?? []
+  const visible = baseParts
     .filter((part) => DETAIL_ORDER.indexOf(part.detail ?? 'low') <= budget)
     // part.id を持つパーツは呼び出し側から差し替えられる（袖丈の切り替えなど）
     .map((part) => (part.id && overrides[part.id] ? { ...part, ...overrides[part.id] } : part))
+
+  // 襟・フード・コートの裾など、体型に合わせて追加する服専用パーツ。
+  // from で既存パーツを雛形にするため、4体型それぞれへ絶対寸法を書く必要がない。
+  visible.push(...materializeExtras(extras, baseParts))
 
   const parts = expandParts(visible)
   const uvGroups = computeUvGroups(parts, height, rest)
@@ -84,6 +89,18 @@ export function buildBody(spec, atlas, { detail = 'normal', overrides = {} } = {
 
   mesh.userData.spec = spec
   return mesh
+}
+
+function materializeExtras(extras, baseParts) {
+  return extras.map((extra) => {
+    const source = baseParts.find((part) =>
+      part.id === extra.from || shortBoneName(part.bone) === extra.from,
+    )
+    if (!source) throw new Error(`服パーツの雛形が見つかりません: ${extra.from}`)
+
+    const { from, ...changes } = extra
+    return { ...source, ...changes, mirror: changes.mirror ?? false }
+  })
 }
 
 /** mirror: true のパーツから、Right側の対を生成する。 */

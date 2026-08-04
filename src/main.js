@@ -149,6 +149,7 @@ function rebuild({ reframe = false } = {}) {
   state.mesh = buildBody(state.spec, state.atlas, {
     detail: state.detail,
     overrides: mergeOverrides(top?.override, bottom?.override),
+    extras: [...(top?.extras ?? []), ...(bottom?.extras ?? [])],
   })
   applyLook(state.mesh, state.look)
   applyPose(state.mesh, state.pose)

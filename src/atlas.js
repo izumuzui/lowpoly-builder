@@ -65,6 +65,8 @@ export const UV_SETS = {
   },
   skin: fill('skin'),
   sleeve: fill('sleeve'),
+  // 襟・フード・ポケットなど、同じ服の中で段差を読ませるための濃い面
+  clothShade: fill('torsoSide'),
   legs: fill('legs'),
   shoe: fill('shoe'),
 }
