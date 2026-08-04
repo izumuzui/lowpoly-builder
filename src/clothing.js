@@ -36,6 +36,34 @@ export const TOPS = [
     },
   },
   {
+    id: 'baggyTshirt',
+    name: 'ダボダボTシャツ',
+    override: {
+      shoulder: {
+        scale: [1.12, 1.28, 1.3],
+        profile: [[0, 0.82, 0.84], [0.24, 1.08, 1.08], [0.72, 1.04, 1.04], [1, 0.94, 0.94]],
+      },
+      upperArm: {
+        scale: [1.16, 1.32, 1.32],
+        profile: [[0, 1.04, 1.04], [0.28, 1.08, 1.08], [0.72, 1.02, 1.02], [1, 0.92, 0.92]],
+      },
+      chest: {
+        scale: [1.18, 1.08, 1.18],
+        profile: [[0, 1.02, 1.02], [0.28, 1.04, 1.04], [0.72, 1.02, 1.02], [1, 0.96, 0.98]],
+      },
+      abdomen: {
+        scale: [1.23, 1.24, 1.2],
+        offsetDelta: [0, -0.012, 0],
+        profile: [[0, 1.08, 1.06], [0.42, 1.05, 1.04], [0.82, 1, 1], [1, 0.98, 0.99]],
+      },
+      pelvis: {
+        scale: [1.16, 1.1, 1.14],
+        offsetDelta: [0, -0.006, 0],
+        profile: [[0, 1.06, 1.04], [0.48, 1.04, 1.03], [1, 0.98, 0.99]],
+      },
+    },
+  },
+  {
     id: 'openShirt',
     name: '開襟シャツ',
     override: {
@@ -128,6 +156,63 @@ export const TOPS = [
     ],
   },
   {
+    id: 'baggyLongShirt',
+    name: 'ダボダボ長袖シャツ',
+    override: {
+      forearm: {
+        uvSet: 'sleeve',
+        scale: [1.06, 1.38, 1.38],
+        profile: [[0, 0.78, 0.78], [0.18, 0.92, 0.92], [0.68, 1.08, 1.08], [1, 1.02, 1.02]],
+      },
+      upperArm: {
+        scale: [1.08, 1.32, 1.32],
+        profile: [[0, 1.04, 1.04], [0.3, 1.08, 1.08], [0.75, 1.04, 1.04], [1, 0.96, 0.96]],
+      },
+      shoulder: { scale: [1.1, 1.28, 1.28] },
+      chest: {
+        scale: [1.16, 1.08, 1.16],
+        profile: [[0, 1.02, 1.02], [0.32, 1.04, 1.04], [0.76, 1.02, 1.02], [1, 0.97, 0.98]],
+      },
+      abdomen: {
+        scale: [1.22, 1.22, 1.2],
+        offsetDelta: [0, -0.01, 0],
+        profile: [[0, 1.08, 1.06], [0.44, 1.04, 1.04], [1, 0.98, 0.99]],
+      },
+      pelvis: { scale: [1.14, 1.08, 1.12], offsetDelta: [0, -0.004, 0] },
+    },
+    extras: [
+      {
+        from: 'Neck',
+        id: 'baggyShirtCollar',
+        uvSet: 'clothShade',
+        uvGroup: null,
+        scale: [1.66, 0.44, 1.48],
+        offsetDelta: [0, -0.004, 0],
+        profile: [[0, 1.06, 1.04], [1, 0.92, 0.94]],
+        omitFacings: ['pz'],
+      },
+      {
+        from: 'chest',
+        id: 'baggyShirtPlacket',
+        shape: 'box',
+        uvSet: 'clothShade',
+        uvGroup: null,
+        scale: [0.035, 1.25, 0.1],
+        offsetDelta: [0, -0.028, 0.08],
+      },
+      {
+        from: 'forearm',
+        id: 'baggyShirtCuff',
+        uvSet: 'clothShade',
+        uvGroup: null,
+        scale: [0.18, 1.1, 1.1],
+        offsetDelta: [0.065, 0, 0],
+        profile: [[0, 0.96, 0.96], [1, 1, 1]],
+        mirror: true,
+      },
+    ],
+  },
+  {
     id: 'hoodie',
     name: 'パーカー',
     override: {
@@ -182,6 +267,62 @@ export const TOPS = [
     ],
   },
   {
+    id: 'baggyHoodie',
+    name: 'ダボダボパーカー',
+    override: {
+      forearm: {
+        uvSet: 'sleeve',
+        scale: [1.06, 1.42, 1.42],
+        profile: [[0, 0.74, 0.76], [0.16, 0.9, 0.92], [0.68, 1.1, 1.1], [1, 1.03, 1.03]],
+      },
+      upperArm: {
+        scale: [1.1, 1.42, 1.42],
+        profile: [[0, 1.06, 1.06], [0.3, 1.1, 1.1], [0.76, 1.05, 1.05], [1, 0.96, 0.96]],
+      },
+      shoulder: { scale: [1.14, 1.35, 1.35] },
+      chest: {
+        scale: [1.24, 1.12, 1.25],
+        profile: [[0, 1.04, 1.04], [0.3, 1.06, 1.06], [0.75, 1.04, 1.04], [1, 0.98, 1]],
+      },
+      abdomen: {
+        scale: [1.3, 1.28, 1.28],
+        offsetDelta: [0, -0.014, 0],
+        profile: [[0, 1.1, 1.08], [0.36, 1.08, 1.07], [0.8, 1.02, 1.03], [1, 0.99, 1]],
+      },
+      pelvis: { scale: [1.18, 1.12, 1.18], offsetDelta: [0, -0.006, 0] },
+    },
+    extras: [
+      {
+        from: 'Head',
+        id: 'baggyHood',
+        uvSet: 'clothShade',
+        uvGroup: null,
+        scale: [1.34, 1.02, 1.4],
+        offsetDelta: [0, -0.022, -0.03],
+        profile: [[0, 0.66, 0.7], [0.18, 0.94, 0.96], [0.52, 1.06, 1.08], [0.82, 1.02, 1.04], [1, 0.74, 0.78]],
+        omitFacings: ['pz'],
+      },
+      {
+        from: 'Neck',
+        id: 'baggyHoodOpening',
+        uvSet: 'clothShade',
+        uvGroup: null,
+        scale: [2.62, 0.88, 2.38],
+        offsetDelta: [0, -0.01, -0.01],
+        profile: [[0, 1.08, 1.04], [0.45, 1, 1], [1, 0.82, 0.86]],
+      },
+      {
+        from: 'abdomen',
+        id: 'baggyHoodiePocket',
+        shape: 'box',
+        uvSet: 'clothShade',
+        uvGroup: null,
+        scale: [0.7, 0.36, 0.19],
+        offsetDelta: [0, -0.028, 0.074],
+      },
+    ],
+  },
+  {
     id: 'jacket',
     name: 'ジャケット',
     override: {
@@ -202,6 +343,42 @@ export const TOPS = [
         profile: [[0, 1.05, 1.04], [0.35, 1.02, 1.02], [0.78, 0.98, 1], [1, 0.96, 0.98]],
       },
     },
+  },
+  {
+    id: 'baggyJacket',
+    name: 'ダボダボジャケット',
+    override: {
+      forearm: {
+        uvSet: 'sleeve',
+        scale: [1.05, 1.34, 1.34],
+        profile: [[0, 0.78, 0.8], [0.18, 0.92, 0.94], [0.72, 1.08, 1.08], [1, 1.02, 1.02]],
+      },
+      upperArm: { scale: [1.1, 1.38, 1.38] },
+      shoulder: { scale: [1.16, 1.34, 1.34] },
+      chest: {
+        scale: [1.24, 1.12, 1.24],
+        profile: [[0, 1.04, 1.04], [0.3, 1.07, 1.07], [0.74, 1.04, 1.04], [1, 0.97, 0.99]],
+      },
+      abdomen: {
+        scale: [1.28, 1.28, 1.25],
+        offsetDelta: [0, -0.014, 0],
+        profile: [[0, 1.1, 1.08], [0.38, 1.07, 1.06], [0.8, 1.02, 1.03], [1, 0.99, 1]],
+      },
+      pelvis: { scale: [1.16, 1.1, 1.16], offsetDelta: [0, -0.006, 0] },
+    },
+    extras: [
+      {
+        from: 'chest',
+        id: 'baggyJacketLapel',
+        shape: 'box',
+        uvSet: 'clothShade',
+        uvGroup: null,
+        scale: [0.075, 0.62, 0.12],
+        offsetDelta: [0.03, 0.006, 0.082],
+        rotate: [0, 0, -14],
+        mirror: true,
+      },
+    ],
   },
   {
     id: 'coat',

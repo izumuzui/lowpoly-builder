@@ -6,7 +6,7 @@ import { applyPhotoPose, detectPhotoPose } from './photo-pose.js?v=20260805-14'
 import { createAutomaticTextureParts, segmentPerson } from './auto-texture.js?v=20260805-14'
 import { openCropper } from './cropper.js'
 import { POSES, applyPose } from './poses.js'
-import { TOPS, BOTTOMS } from './clothing.js'
+import { TOPS, BOTTOMS } from './clothing.js?v=20260805-15'
 import { applyLook, DEFAULT_LOOK } from './psx.js'
 import { exportGLB, exportPNG, timestamp } from './exporter.js'
 
