@@ -13,12 +13,13 @@
  */
 import * as THREE from 'three'
 import { createSkeleton, BONE_PREFIX } from './skeleton.js'
-import { appendBox, appendRings, DETAIL_LEVELS, DETAIL_ORDER } from './shapes.js'
+import { appendBox, appendRings, appendWedge, DETAIL_LEVELS, DETAIL_ORDER } from './shapes.js'
 
 /** part.shape が指す形状の生成関数。既定は box。 */
 const SHAPES = {
   box: appendBox,
   rings: appendRings,
+  wedge: appendWedge,
 }
 
 export async function loadBodyList(baseUrl = './bodies') {
@@ -124,6 +125,12 @@ function expandParts(parts) {
     // 左右反転にあわせてY・Z軸まわりの回転の符号を返す
     if (part.rotate) {
       mirrored.rotate = [part.rotate[0], -part.rotate[1], -part.rotate[2]]
+    }
+
+    // 服の追加パーツは元の offset を維持したまま offsetDelta で左右へ置く。
+    // ここを反転しないと、ラペルやコートの左右パネルが同じ側へ重なってしまう。
+    if (part.offsetDelta) {
+      mirrored.offsetDelta = [-part.offsetDelta[0], part.offsetDelta[1], part.offsetDelta[2]]
     }
 
     // X軸方向の形状は左右で向きが反転するため、並びを逆にする

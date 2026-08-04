@@ -45,6 +45,58 @@ export function appendBox(part, dimensions, boneIndex, buffers) {
 }
 
 /**
+ * 正面が下向きの三角形になる薄いプリズム。
+ * 開襟シャツのV字開口部など、箱では作れない尖った面に使う。
+ */
+export function appendWedge(part, dimensions, boneIndex, buffers) {
+  const { half, center } = dimensions
+  const uvSet = resolveUvSet(part.uvSet)
+  const point = (x, y, z) => ({
+    x: center.x + x * half.x,
+    y: center.y + y * half.y,
+    z: center.z + z * half.z,
+  })
+
+  const frontBottom = point(0, -1, 1)
+  const frontLeft = point(-1, 1, 1)
+  const frontRight = point(1, 1, 1)
+  const backBottom = point(0, -1, -1)
+  const backLeft = point(-1, 1, -1)
+  const backRight = point(1, 1, -1)
+
+  emitTriangle(
+    buffers,
+    [frontBottom, frontRight, frontLeft],
+    makeProjector('pz', uvSet.pz, dimensions),
+    boneIndex,
+  )
+  emitTriangle(
+    buffers,
+    [backBottom, backLeft, backRight],
+    makeProjector('nz', uvSet.nz, dimensions),
+    boneIndex,
+  )
+  emitQuad(
+    buffers,
+    [frontLeft, frontRight, backRight, backLeft],
+    makeProjector('py', uvSet.py, dimensions),
+    boneIndex,
+  )
+  emitQuad(
+    buffers,
+    [backBottom, frontBottom, frontLeft, backLeft],
+    makeProjector('nx', uvSet.nx, dimensions),
+    boneIndex,
+  )
+  emitQuad(
+    buffers,
+    [frontBottom, backBottom, backRight, frontRight],
+    makeProjector('px', uvSet.px, dimensions),
+    boneIndex,
+  )
+}
+
+/**
  * テーパー付きの箱の頂点位置。
  * taperAxis の負側の端で taper[0]、正側の端で taper[1] の倍率を、残り2軸に掛ける。
  */
