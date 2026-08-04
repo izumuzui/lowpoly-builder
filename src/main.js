@@ -1,8 +1,9 @@
 import { createViewer } from './viewer.js'
 import { createAtlas, region, paintSlot, setAtlasScale } from './atlas.js'
 import { loadBodyList, loadBodySpec, buildBody } from './body.js'
-import { decodeImage, detectFace, paintFace, paintFaceCrop, sampleSkinTone, shadeOf } from './face.js'
-import { applyPhotoPose, detectPhotoPose } from './photo-pose.js'
+import { decodeImage, detectFace, paintFace, paintFaceCrop, sampleSkinTone, shadeOf } from './face.js?v=20260804-11'
+import { applyPhotoPose, detectPhotoPose } from './photo-pose.js?v=20260804-11'
+import { createAutomaticTextureParts, segmentPerson } from './auto-texture.js?v=20260804-11'
 import { openCropper } from './cropper.js'
 import { POSES, applyPose } from './poses.js'
 import { TOPS, BOTTOMS } from './clothing.js'
@@ -61,6 +62,8 @@ const el = {
   sourceNote: document.getElementById('source-note'),
   sourceAdd: document.getElementById('source-add'),
   sourceInput: document.getElementById('source-input'),
+  autoTextureApply: document.getElementById('auto-texture-apply'),
+  autoTextureNote: document.getElementById('auto-texture-note'),
   photoPoseApply: document.getElementById('photo-pose-apply'),
   photoPoseNote: document.getElementById('photo-pose-note'),
   slotList: document.getElementById('slot-list'),
@@ -97,6 +100,7 @@ const state = {
   pose: 'tpose',
   detectedPose: null,
   poseBusy: false,
+  textureBusy: false,
   top: 'tshirt',
   bottom: 'pants',
   backdrop: 'dark',
@@ -246,17 +250,31 @@ function renderSources() {
   )
 
   const selected = activeSource()
+  const imageBusy = state.poseBusy || state.textureBusy
+  const selectedPoseApplied = state.pose === DETECTED_POSE_ID
+    && state.detectedPose?.sourceId === selected?.id
   el.sourceNote.textContent = selected
     ? `選択中: ${selected.name}`
     : '1枚でも複数でもまとめて追加できます。'
   el.slotNote.textContent = selected
     ? `「${selected.name}」から切り出す部位を選んでください。`
     : '素材画像を選んでから、切り出す部位を選んでください。'
-  el.photoPoseApply.disabled = !selected || state.poseBusy
+  el.autoTextureApply.disabled = !selected || imageBusy
+  el.autoTextureApply.textContent = state.textureBusy
+    ? '人物を分けて貼り付け中…'
+    : selected?.textureAnalysis
+      ? 'この写真を自動で貼り直す'
+      : 'この写真を自動で貼り付け'
+  el.autoTextureNote.textContent = selected?.textureAnalysis
+    ? `${selected.textureAnalysis.facing === 'front' ? '正面' : '背面'}写真として、${selected.textureAnalysis.labels.join('・')}へ貼り付け済みです。`
+    : '人物を顔・髪・服・下半身・靴へ分け、対応する場所へまとめて貼ります。'
+  el.photoPoseApply.disabled = !selected || imageBusy
   el.photoPoseApply.textContent = state.poseBusy
     ? '3D姿勢を読み取り中…'
-    : selected?.poseDetection
+    : selectedPoseApplied
       ? 'この写真のポーズを再反映'
+      : selected?.poseDetection
+        ? '検出済みのポーズを反映'
       : '選択中の写真からポーズを反映'
   el.photoPoseNote.textContent = selected?.poseDetection
     ? `「${selected.name}」から${selected.poseDetection.visibleLandmarks}点を検出済みです。`
@@ -310,7 +328,10 @@ function renderSlots() {
       const stateText = document.createElement('span')
       stateText.className = 'slot__state'
       const filled = state.slots[slot.id]
-      stateText.textContent = filled ? sourceById(filled.sourceId)?.name ?? '画像あり' : slot.hint
+      const sourceName = sourceById(filled?.sourceId)?.name ?? '画像あり'
+      stateText.textContent = filled
+        ? `${filled.automatic ? '自動: ' : ''}${sourceName}`
+        : slot.hint
       text.append(label, stateText)
 
       pick.append(preview, text)
@@ -471,6 +492,9 @@ async function addSourceFiles(files) {
         image,
         // undefined は未検出、null は検出を試したが見つからなかった状態
         detection: undefined,
+        poseDetection: undefined,
+        segmentation: undefined,
+        textureAnalysis: null,
       }
       state.sources.push(source)
       added.push(source)
@@ -562,6 +586,91 @@ async function applyPoseFromActiveSource() {
   }
 }
 
+/** 選択中の写真を人物領域へ分け、検出できた各スロットへまとめて貼る。 */
+async function applyAutomaticTextureFromActiveSource() {
+  const source = activeSource()
+  if (!source || state.textureBusy || state.poseBusy) return
+
+  state.textureBusy = true
+  renderSources()
+  setStatus('写真の人物を顔・髪・服へ分けています')
+  try {
+    source.segmentation ??= await segmentPerson(source.image)
+    if (source.detection === undefined) {
+      try {
+        source.detection = await detectFace(source.image)
+      } catch (error) {
+        console.warn('顔検出を省略します', error)
+        source.detection = null
+      }
+    }
+    if (source.poseDetection === undefined) {
+      try {
+        source.poseDetection = await detectPhotoPose(source.image)
+      } catch (error) {
+        console.warn('部位分割では姿勢点を省略します', error)
+        source.poseDetection = null
+      }
+    }
+
+    const analysis = createAutomaticTextureParts(source.image, source.segmentation, {
+      poseDetection: source.poseDetection,
+      faceDetection: source.detection,
+    })
+    const assignments = analysis.facing === 'front'
+      ? [
+          ['face', 'face'],
+          ['hair', 'hair'],
+          ['shirt', 'shirt'],
+          ['pants', 'pants'],
+          ['shoes', 'shoes'],
+        ]
+      : [
+          ['hair', 'hair'],
+          ['shirtBack', 'shirt'],
+        ]
+    const applied = []
+
+    for (const [slotId, partId] of assignments) {
+      const part = analysis.parts[partId]
+      if (!part) continue
+      releaseSlot(slotId)
+      const slot = SLOTS.find((item) => item.id === slotId)
+      state.slots[slotId] = {
+        image: part.canvas,
+        fit: 'cover',
+        sourceId: source.id,
+        selection: part.selection,
+        detection: slot?.detect ? part.detection : null,
+        skinTone: slotId === 'face' ? sampleSkinTone(source.image, source.detection) : undefined,
+        automatic: true,
+      }
+      applied.push({ id: slotId, label: slot?.label ?? slotId })
+    }
+
+    if (!applied.length) throw new Error('モデルへ貼れる人物領域が見つかりませんでした')
+    if (state.atlasScale < 2) {
+      state.atlasScale = 2
+      el.lookTexture.value = '2'
+    }
+    source.textureAnalysis = {
+      facing: analysis.facing,
+      slots: applied.map((item) => item.id),
+      labels: applied.map((item) => item.label),
+    }
+    rebuild({ reframe: true })
+    renderSlots()
+    const direction = analysis.facing === 'front' ? '正面' : '背面'
+    setStatus(`${direction}写真から${applied.length}部位を自動で貼り付けました`)
+  } catch (error) {
+    console.error(error)
+    setStatus(`自動貼り付けに失敗しました: ${error.message}`, 'error')
+  } finally {
+    state.textureBusy = false
+    renderSources()
+  }
+}
+
 /** ドラッグ&ドロップの受け口。タイルにもステージにも同じ挙動をつける。 */
 function attachDropTarget(element, slotId) {
   let depth = 0
@@ -593,6 +702,7 @@ function wireSlots() {
     pendingSlot = null
     el.sourceInput.click()
   })
+  el.autoTextureApply.addEventListener('click', () => void applyAutomaticTextureFromActiveSource())
   el.photoPoseApply.addEventListener('click', () => void applyPoseFromActiveSource())
   el.sourceInput.addEventListener('change', async () => {
     const files = [...(el.sourceInput.files ?? [])]

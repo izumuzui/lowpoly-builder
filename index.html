@@ -78,6 +78,12 @@
           <ul class="sources" id="source-list" aria-label="素材画像"></ul>
           <p class="note" id="source-note">1枚でも複数でもまとめて追加できます。</p>
           <div class="photo-pose">
+            <button class="button button--primary" id="auto-texture-apply" type="button" disabled>
+              この写真を自動で貼り付け
+            </button>
+            <p class="note photo-pose__note" id="auto-texture-note">
+              人物を顔・髪・服・下半身・靴へ分け、対応する場所へまとめて貼ります。
+            </p>
             <button class="button" id="photo-pose-apply" type="button" disabled>
               選択中の写真からポーズを反映
             </button>
@@ -183,6 +189,6 @@
       </aside>
     </div>
 
-    <script type="module" src="./src/main.js"></script>
+    <script type="module" src="./src/main.js?v=20260804-11"></script>
   </body>
 </html>

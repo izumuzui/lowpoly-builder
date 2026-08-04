@@ -5,7 +5,7 @@
  * リアルな顔がカクカクの体に乗る違和感（狙いの質感）を残す。
  * 128pxまで落とすため、切り抜きの粗さはむしろ味になる。
  */
-import { MEDIAPIPE_WASM_BASE, FACE_DETECTOR_MODEL } from './config.js'
+import { MEDIAPIPE_WASM_BASE, FACE_DETECTOR_MODEL } from './config.js?v=20260804-11'
 import { region, quantize15bit, drawPlaceholderFace, FACE_ANCHOR } from './atlas.js'
 
 const { eyeSpan: EYE_SPAN, eyeLine: EYE_LINE } = FACE_ANCHOR
@@ -103,8 +103,10 @@ export function paintFace(atlas, source, detection) {
   cutCtx.setTransform(1, 0, 0, 1, 0, 0)
 
   const { ctx } = atlas
-  // 以前の仮の顔や肌色の下地を残さない。
-  ctx.clearRect(rx, ry, rw, rh)
+  // セグメンテーション済み画像は顔の外が透明なので、写真から拾った肌色を下に残す。
+  // 通常の不透明写真ではこの下地は見えない。
+  ctx.fillStyle = atlas.colors.skin
+  ctx.fillRect(rx, ry, rw, rh)
   ctx.imageSmoothingEnabled = false
   ctx.drawImage(cut, rx, ry)
 
@@ -133,8 +135,9 @@ export function paintFaceCrop(atlas, image) {
   cutCtx.drawImage(image, (rw - drawW) / 2, (rh - drawH) / 2, drawW, drawH)
 
   const { ctx } = atlas
-  // 以前の仮の顔や肌色の下地を残さない。
-  ctx.clearRect(rx, ry, rw, rh)
+  // 透明な切り抜きでも顔の外周が黒くならないよう肌色を敷く。
+  ctx.fillStyle = atlas.colors.skin
+  ctx.fillRect(rx, ry, rw, rh)
   ctx.imageSmoothingEnabled = false
   ctx.drawImage(cut, rx, ry)
 
