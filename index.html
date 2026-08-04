@@ -68,12 +68,20 @@
           </button>
         </header>
 
-        <!-- 画像を最初に置く。顔も服も同じ「枠に貼る」操作に統一してある -->
+        <!-- 元画像を先に集め、同じ画像から顔や服を何度でも切り出せる -->
         <section class="section">
           <h2 class="section__title">画像</h2>
+          <div class="source-head">
+            <h3 class="group__title">素材画像</h3>
+            <button class="button source-add" id="source-add" type="button">画像を追加</button>
+          </div>
+          <ul class="sources" id="source-list" aria-label="素材画像"></ul>
+          <p class="note" id="source-note">1枚でも複数でもまとめて追加できます。</p>
+          <input type="file" id="source-input" accept="image/*" multiple hidden />
+
+          <h3 class="group__title slot-heading">貼り付け先</h3>
           <ul class="slots" id="slot-list"></ul>
-          <p class="note" id="slot-note">枠を選ぶか、画像をここへ落としてください。</p>
-          <input type="file" id="slot-input" accept="image/*" hidden />
+          <p class="note" id="slot-note">素材画像を選んでから、切り出す部位を選んでください。</p>
         </section>
 
         <section class="section">

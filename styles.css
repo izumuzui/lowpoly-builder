@@ -182,6 +182,108 @@ code {
   color: var(--danger);
 }
 
+/* ---------- 素材画像 ---------- */
+
+.source-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.source-add {
+  min-height: 34px;
+  padding: var(--space-2xs) var(--space-sm);
+}
+
+.sources {
+  display: flex;
+  gap: var(--space-xs);
+  margin: var(--space-xs) 0 0;
+  padding: 0 0 var(--space-2xs);
+  overflow-x: auto;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.source {
+  position: relative;
+  flex: 0 0 78px;
+  min-width: 0;
+}
+
+.source__pick {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  width: 100%;
+  padding: var(--space-2xs);
+  font: inherit;
+  color: var(--ink-dim);
+  text-align: left;
+  background: var(--surface-sunken);
+  border: 1px solid transparent;
+  border-radius: var(--radius-section);
+  cursor: pointer;
+}
+
+.source__pick:hover {
+  color: var(--ink);
+  background: var(--surface-raised);
+}
+
+.source__pick[aria-pressed='true'] {
+  color: var(--ink);
+  background: var(--surface-selected);
+  border-color: var(--accent-dim);
+}
+
+.source__preview {
+  width: 100%;
+  aspect-ratio: 1;
+  background: var(--surface-stage);
+  border-radius: var(--radius-control);
+  object-fit: cover;
+}
+
+.source__name {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  font-size: var(--text-xs);
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source__remove {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font: inherit;
+  font-size: var(--text-xs);
+  color: var(--ink-dim);
+  background: var(--surface-panel);
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.source__remove:hover {
+  color: var(--ink);
+  background: var(--surface-raised-hover);
+}
+
+.slot-heading {
+  margin-top: var(--space-md);
+  margin-bottom: var(--space-xs);
+}
+
 /* ---------- 画像スロット ---------- */
 
 .slots {

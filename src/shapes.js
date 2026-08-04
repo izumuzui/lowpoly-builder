@@ -109,10 +109,10 @@ export const DETAIL_ORDER = ['low', 'normal', 'high', 'ultra']
  */
 export const DETAIL_LEVELS = {
   low: { sides: 0.7, rings: 1 },
-  normal: { sides: 1, rings: 1 },
-  // 「細かい」はリングを増やさない。差はパーツの追加で出す
-  high: { sides: 1.25, rings: 1 },
-  ultra: { sides: 1.6, rings: 2 },
+  // 標準でも輪郭の節目を補間する。面の粗さを残しつつ、肩・肘・膝の段差を弱める
+  normal: { sides: 1.25, rings: 2 },
+  high: { sides: 1.5, rings: 2 },
+  ultra: { sides: 2, rings: 3 },
 }
 
 /** 隣り合うリングの間に中間のリングを1枚ずつ挟む。 */

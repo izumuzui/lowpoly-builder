@@ -54,9 +54,12 @@ const el = {
   panel: document.getElementById('settings-panel'),
   panelToggle: document.getElementById('panel-toggle'),
   status: document.getElementById('status'),
+  sourceList: document.getElementById('source-list'),
+  sourceNote: document.getElementById('source-note'),
+  sourceAdd: document.getElementById('source-add'),
+  sourceInput: document.getElementById('source-input'),
   slotList: document.getElementById('slot-list'),
   slotNote: document.getElementById('slot-note'),
-  slotInput: document.getElementById('slot-input'),
   bodyList: document.getElementById('body-list'),
   poseList: document.getElementById('pose-list'),
   topList: document.getElementById('top-list'),
@@ -79,7 +82,10 @@ const state = {
   spec: null,
   atlas: null,
   mesh: null,
-  /** 枠ID → { image, source, selection, detection?, fit? }。体型を切り替えても保持して貼り直す。 */
+  /** 取り込んだ元画像。同じ素材を複数の部位から参照できる。 */
+  sources: [],
+  activeSourceId: null,
+  /** 枠ID → { image, sourceId, selection, detection?, fit? }。体型を切り替えても保持する。 */
   slots: {},
   look: { ...DEFAULT_LOOK },
   detail: 'normal',
@@ -90,6 +96,8 @@ const state = {
   /** アトラスの倍率。実写を貼るときは上げないと情報が足りない */
   atlasScale: 1,
 }
+
+let sourceSequence = 0
 
 function setStatus(message, tone = 'info') {
   el.status.textContent = message
@@ -135,12 +143,12 @@ function rebuild({ reframe = false } = {}) {
     }
   }
 
-  // 上下は別のパーツを触るため、そのまま重ねてよい
+  // 同じパーツを上下の服が触る場合も、プロパティ単位で合成する
   const top = TOPS.find((t) => t.id === state.top)
   const bottom = BOTTOMS.find((b) => b.id === state.bottom)
   state.mesh = buildBody(state.spec, state.atlas, {
     detail: state.detail,
-    overrides: { ...top?.override, ...bottom?.override },
+    overrides: mergeOverrides(top?.override, bottom?.override),
   })
   applyLook(state.mesh, state.look)
   applyPose(state.mesh, state.pose)
@@ -150,6 +158,16 @@ function rebuild({ reframe = false } = {}) {
   if (reframe) state.viewer.frame(state.mesh)
 
   drawSlotPreviews()
+}
+
+function mergeOverrides(...groups) {
+  const merged = {}
+  for (const group of groups) {
+    for (const [part, override] of Object.entries(group ?? {})) {
+      merged[part] = { ...merged[part], ...override }
+    }
+  }
+  return merged
 }
 
 function reportModel() {
@@ -162,6 +180,80 @@ function reportModel() {
 /* ---------- 画像スロット ---------- */
 
 let pendingSlot = null
+
+function sourceById(id) {
+  return state.sources.find((source) => source.id === id) ?? null
+}
+
+function activeSource() {
+  return sourceById(state.activeSourceId)
+}
+
+function renderSources() {
+  el.sourceList.replaceChildren(
+    ...state.sources.map((source) => {
+      const item = document.createElement('li')
+      item.className = 'source'
+
+      const pick = document.createElement('button')
+      pick.type = 'button'
+      pick.className = 'source__pick'
+      pick.setAttribute('aria-pressed', String(source.id === state.activeSourceId))
+      pick.setAttribute('aria-label', `${source.name}を素材として選ぶ`)
+
+      const preview = document.createElement('canvas')
+      preview.className = 'source__preview'
+      preview.width = 72
+      preview.height = 72
+      preview.dataset.source = source.id
+
+      const name = document.createElement('span')
+      name.className = 'source__name'
+      name.textContent = source.name
+      name.title = source.name
+      pick.append(preview, name)
+      pick.addEventListener('click', () => selectSource(source.id))
+      item.append(pick)
+
+      const remove = document.createElement('button')
+      remove.type = 'button'
+      remove.className = 'source__remove'
+      remove.textContent = '×'
+      remove.setAttribute('aria-label', `${source.name}を素材一覧から外す`)
+      remove.addEventListener('click', () => removeSource(source.id))
+      item.append(remove)
+      return item
+    }),
+  )
+
+  const selected = activeSource()
+  el.sourceNote.textContent = selected
+    ? `選択中: ${selected.name}`
+    : '1枚でも複数でもまとめて追加できます。'
+  el.slotNote.textContent = selected
+    ? `「${selected.name}」から切り出す部位を選んでください。`
+    : '素材画像を選んでから、切り出す部位を選んでください。'
+  drawSourcePreviews()
+}
+
+function drawSourcePreviews() {
+  for (const canvas of el.sourceList.querySelectorAll('.source__preview')) {
+    const source = sourceById(canvas.dataset.source)
+    if (!source) continue
+    const ctx = canvas.getContext('2d')
+    const scale = Math.max(canvas.width / source.image.width, canvas.height / source.image.height)
+    const width = source.image.width * scale
+    const height = source.image.height * scale
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.drawImage(source.image, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height)
+  }
+}
+
+function selectSource(id) {
+  state.activeSourceId = id
+  renderSources()
+  renderSlots()
+}
 
 function renderSlots() {
   el.slotList.replaceChildren(
@@ -189,11 +281,12 @@ function renderSlots() {
       label.textContent = slot.label
       const stateText = document.createElement('span')
       stateText.className = 'slot__state'
-      stateText.textContent = state.slots[slot.id] ? '画像あり' : slot.hint
+      const filled = state.slots[slot.id]
+      stateText.textContent = filled ? sourceById(filled.sourceId)?.name ?? '画像あり' : slot.hint
       text.append(label, stateText)
 
       pick.append(preview, text)
-      pick.addEventListener('click', () => openSlot(slot.id))
+      pick.addEventListener('click', () => void openSlot(slot.id))
       item.append(pick)
 
       const clear = document.createElement('button')
@@ -250,20 +343,44 @@ function drawSlotPreviews() {
 }
 
 /**
- * 枠をひらく。既に画像がある枠は、同じ元画像のまま選び直せる。
+ * 選択中の素材から枠を切り出す。同じ素材なら前回の矩形を保ったまま微調整できる。
  */
-function openSlot(slotId) {
+async function openSlot(slotId) {
   const existing = state.slots[slotId]
-  if (existing?.source) {
-    runCropper(slotId, existing.source, existing.selection, existing.detection ?? null)
+  let source = activeSource()
+  if (!source && existing) {
+    source = sourceById(existing.sourceId)
+  }
+
+  if (!source) {
+    pendingSlot = slotId
+    el.sourceInput.click()
     return
   }
-  pendingSlot = slotId
-  el.slotInput.click()
+
+  const initial = existing?.sourceId === source.id ? existing.selection : null
+  try {
+    await runCropper(slotId, source, initial)
+  } catch (error) {
+    console.error(error)
+    setStatus(`画像の処理に失敗しました: ${error.message}`, 'error')
+  }
 }
 
-async function runCropper(slotId, source, initial, detection) {
+async function runCropper(slotId, source, initial) {
   const slot = SLOTS.find((s) => s.id === slotId)
+  if (!slot) return
+
+  if (slot.detect && source.detection === undefined) {
+    setStatus('顔を検出しています')
+    try {
+      source.detection = await detectFace(source.image)
+    } catch (error) {
+      console.warn('顔検出を省略します', error)
+      source.detection = null
+    }
+  }
+  const detection = slot.detect ? source.detection : null
   const modes = (CROP_MODES[slotId] ?? CROP_MODES.default).map((mode) =>
     // 顔が見つからなければ自動は選べない
     mode.id === 'auto' && !detection
@@ -271,24 +388,27 @@ async function runCropper(slotId, source, initial, detection) {
       : mode,
   )
 
-  const result = await openCropper({ image: source, label: slot.label, modes, initial, detection })
-  if (!result) return
-
-  if (result.replace) {
-    pendingSlot = slotId
-    el.slotInput.click()
+  const result = await openCropper({ image: source.image, label: slot.label, modes, initial, detection })
+  if (!result) {
+    reportModel()
     return
   }
 
-  // 元画像は選び直しのために持ち続ける。差し替え時だけ古いものを解放する
-  const previous = state.slots[slotId]
-  if (previous && previous.source !== source) previous.source?.close?.()
+  if (result.replace) {
+    pendingSlot = slotId
+    el.sourceInput.click()
+    return
+  }
 
-  const image = result.mode === 'auto' ? source : result.canvas
+  const previous = state.slots[slotId]
+  const previousSource = sourceById(previous?.sourceId)
+  if (previous?.image && previous.image !== previousSource?.image) previous.image.close?.()
+
+  const image = result.mode === 'auto' ? source.image : result.canvas
   state.slots[slotId] = {
     image,
     fit: result.fit,
-    source,
+    sourceId: source.id,
     selection: result.selection,
     // 検出結果は元画像の性質なので、どのモードを選んでも持ち続ける。
     // 捨てると開き直したときに自動へ戻せなくなる
@@ -305,32 +425,81 @@ async function runCropper(slotId, source, initial, detection) {
   setStatus(`${slot.label}に貼りました (${label})`)
 }
 
-async function applyToSlot(slotId, file) {
-  const slot = SLOTS.find((s) => s.id === slotId)
-  if (!slot) return
-  if (!file || !file.type.startsWith('image/')) {
+async function addSourceFiles(files) {
+  const images = [...files].filter((file) => file?.type.startsWith('image/'))
+  if (!images.length) {
     setStatus('画像ファイルを選んでください', 'error')
-    return
+    return []
   }
 
-  setStatus(slot.detect ? '顔を検出しています' : '画像を読み込んでいます')
-  try {
-    const image = await decodeImage(file)
-    // 顔の枠は先に検出しておき、自動モードが選べるかを範囲選択画面へ渡す
-    const detection = slot.detect ? await detectFace(image) : null
-    await runCropper(slotId, image, null, detection)
-  } catch (error) {
-    console.error(error)
-    setStatus(`画像の処理に失敗しました: ${error.message}`, 'error')
+  setStatus(`${images.length}枚の画像を読み込んでいます`)
+  const added = []
+  for (const file of images) {
+    try {
+      const image = await decodeImage(file)
+      const source = {
+        id: `source-${++sourceSequence}`,
+        name: file.name || `素材${sourceSequence}`,
+        image,
+        // undefined は未検出、null は検出を試したが見つからなかった状態
+        detection: undefined,
+      }
+      state.sources.push(source)
+      added.push(source)
+    } catch (error) {
+      console.error(error)
+      setStatus(`画像の処理に失敗しました: ${error.message}`, 'error')
+    }
   }
+
+  if (added.length) {
+    state.activeSourceId = added[0].id
+    renderSources()
+    renderSlots()
+    setStatus(`${added.length}枚の素材画像を追加しました`)
+  }
+  return added
+}
+
+async function importForSlot(slotId, files) {
+  const added = await addSourceFiles(files)
+  if (!added.length) return
+  state.activeSourceId = added[0].id
+  await openSlot(slotId)
+}
+
+function releaseSlot(slotId) {
+  const filled = state.slots[slotId]
+  if (!filled) return
+  const source = sourceById(filled.sourceId)
+  if (filled.image !== source?.image) filled.image?.close?.()
+  delete state.slots[slotId]
 }
 
 function clearSlot(slotId) {
-  const filled = state.slots[slotId]
-  filled?.image?.close?.()
-  if (filled?.source !== filled?.image) filled?.source?.close?.()
-  delete state.slots[slotId]
+  releaseSlot(slotId)
   rebuild()
+  renderSlots()
+  reportModel()
+}
+
+function removeSource(id) {
+  const source = sourceById(id)
+  if (!source) return
+  const usedBy = Object.entries(state.slots)
+    .filter(([, filled]) => filled.sourceId === id)
+    .map(([slotId]) => slotId)
+
+  if (usedBy.length && !window.confirm('この素材を使っている貼り付けも外します。よろしいですか？')) {
+    return
+  }
+
+  usedBy.forEach(releaseSlot)
+  source.image.close?.()
+  state.sources = state.sources.filter((item) => item.id !== id)
+  if (state.activeSourceId === id) state.activeSourceId = state.sources[0]?.id ?? null
+  rebuild()
+  renderSources()
   renderSlots()
   reportModel()
 }
@@ -353,19 +522,29 @@ function attachDropTarget(element, slotId) {
     event.stopPropagation()
     depth = 0
     delete element.dataset.dragover
-    applyToSlot(slotId, event.dataTransfer?.files?.[0])
+    void importForSlot(slotId, event.dataTransfer?.files ?? [])
   })
 }
 
 function wireSlots() {
+  renderSources()
   renderSlots()
   // ステージへ落とした場合は顔として扱う
   attachDropTarget(el.stage, 'face')
-  el.slotInput.addEventListener('change', () => {
-    const file = el.slotInput.files?.[0]
-    el.slotInput.value = ''
-    if (pendingSlot) applyToSlot(pendingSlot, file)
+  el.sourceAdd.addEventListener('click', () => {
     pendingSlot = null
+    el.sourceInput.click()
+  })
+  el.sourceInput.addEventListener('change', async () => {
+    const files = [...(el.sourceInput.files ?? [])]
+    const target = pendingSlot
+    el.sourceInput.value = ''
+    pendingSlot = null
+    const added = await addSourceFiles(files)
+    if (target && added.length) {
+      state.activeSourceId = added[0].id
+      await openSlot(target)
+    }
   })
 }
 
