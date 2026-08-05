@@ -47,7 +47,6 @@ src/
   config.js     モジュール以外の外部URL
 bodies/         体型スペック
 vendor/three/   取り込んだthree.js（update.shで更新）
-samples/        書き出し例（Blenderでの確認用）
 ```
 
 ## 外部への通信
