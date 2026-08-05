@@ -29,3 +29,18 @@ export const POSE_LANDMARKER_MODEL =
 /** 人物を背景・髪・肌・顔・服・小物の6領域へ分ける256pxモデル。 */
 export const SELFIE_MULTICLASS_MODEL =
   'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite'
+
+/**
+ * 服の種類まで分けるSCHP-LIP（INT8、約68MB）。初めて「自動で貼り付け」を実行した
+ * ときだけ取得し、WebAssemblyのCPU推論用Workerで使う。写真そのものは送信しない。
+ * LIPの20分類には上着・コート・パンツ・スカート・左右の靴などが含まれる。
+ */
+export const HUMAN_PARSING_MODEL =
+  'https://huggingface.co/pirocheto/schp-lip-20/resolve/main/onnx/schp-lip-20-int8-static.onnx'
+
+/** ONNX Runtime WebはWorker内でclassic bundleとして読み込む。 */
+export const ONNX_RUNTIME_WEB =
+  'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/ort.min.js'
+
+export const ONNX_RUNTIME_WASM_BASE =
+  'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/'

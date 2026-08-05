@@ -1,12 +1,15 @@
 /**
  * 人物セグメンテーションと姿勢点から、既存の画像スロットへ貼れる部位画像を作る。
- * モデルの6分類は服を上下に分けないため、Pose Landmarkerの腰・膝・足首で分割する。
+ * 通常は服の種類も返す人間パースモデルを使い、失敗時だけMediaPipeの6分類を姿勢点で補う。
  */
 import {
   MEDIAPIPE_VISION_MODULE,
   MEDIAPIPE_WASM_BASE,
   SELFIE_MULTICLASS_MODEL,
-} from './config.js?v=20260805-14'
+  HUMAN_PARSING_MODEL,
+  ONNX_RUNTIME_WEB,
+  ONNX_RUNTIME_WASM_BASE,
+} from './config.js?v=20260805-18'
 
 const CATEGORY = {
   background: 0,
@@ -16,6 +19,33 @@ const CATEGORY = {
   clothes: 4,
   other: 5,
 }
+
+const HUMAN_CATEGORY = {
+  background: 0,
+  hair: 2,
+  upperClothes: 5,
+  dress: 6,
+  coat: 7,
+  socks: 8,
+  pants: 9,
+  jumpsuit: 10,
+  skirt: 12,
+  face: 13,
+  leftShoe: 18,
+  rightShoe: 19,
+}
+
+const HUMAN_GARMENT_LABELS = [
+  [HUMAN_CATEGORY.upperClothes, '上着'],
+  [HUMAN_CATEGORY.coat, 'コート'],
+  [HUMAN_CATEGORY.dress, 'ワンピース'],
+  [HUMAN_CATEGORY.jumpsuit, 'つなぎ'],
+  [HUMAN_CATEGORY.pants, 'パンツ'],
+  [HUMAN_CATEGORY.skirt, 'スカート'],
+  [HUMAN_CATEGORY.socks, '靴下'],
+  [HUMAN_CATEGORY.leftShoe, '靴'],
+  [HUMAN_CATEGORY.rightShoe, '靴'],
+]
 
 const LANDMARK = {
   nose: 0,
@@ -44,61 +74,139 @@ const MIN_PART_RATIO = 0.0008
 const PANTS_TOP_INSET = 0.055
 const PANTS_BOTTOM_INSET = 0.015
 
-let worker = null
-let requestSequence = 0
-const requests = new Map()
+function categoryProfile(segmentation) {
+  if (segmentation?.kind === 'human-parsing') {
+    const top = new Set([
+      HUMAN_CATEGORY.upperClothes,
+      HUMAN_CATEGORY.dress,
+      HUMAN_CATEGORY.coat,
+      HUMAN_CATEGORY.jumpsuit,
+    ])
+    const bottom = new Set([
+      HUMAN_CATEGORY.pants,
+      HUMAN_CATEGORY.skirt,
+      HUMAN_CATEGORY.dress,
+      HUMAN_CATEGORY.jumpsuit,
+    ])
+    const shoes = new Set([
+      HUMAN_CATEGORY.socks,
+      HUMAN_CATEGORY.leftShoe,
+      HUMAN_CATEGORY.rightShoe,
+    ])
+    return {
+      detailed: true,
+      background: HUMAN_CATEGORY.background,
+      hair: (category) => category === HUMAN_CATEGORY.hair,
+      face: (category) => category === HUMAN_CATEGORY.face,
+      top: (category) => top.has(category),
+      bottom: (category) => bottom.has(category),
+      shoes: (category) => shoes.has(category),
+    }
+  }
+  return {
+    detailed: false,
+    background: CATEGORY.background,
+    hair: (category) => category === CATEGORY.hair,
+    face: (category) => category === CATEGORY.bodySkin || category === CATEGORY.faceSkin,
+    top: (category) => category === CATEGORY.clothes,
+    bottom: (category) => category === CATEGORY.clothes,
+    shoes: (category) => category === CATEGORY.clothes || category === CATEGORY.other,
+  }
+}
 
-/** 推論専用Workerを使い回す。写真はImageBitmapとして渡し、サーバーへは送らない。 */
+function detectedGarments(categories) {
+  const detected = new Set(categories)
+  return [...new Set(HUMAN_GARMENT_LABELS
+    .filter(([category]) => detected.has(category))
+    .map(([, label]) => label))]
+}
+
+const workerStates = {
+  detailed: { worker: null, requests: new Map() },
+  lightweight: { worker: null, requests: new Map() },
+}
+let requestSequence = 0
+
+/**
+ * 服の種類まで返す人間パースを優先する。モデルの読み込みに失敗した場合だけ、
+ * 軽量なMediaPipeの人物分割へ安全に戻す。
+ */
 export async function segmentPerson(image) {
+  try {
+    return await runSegmentation('detailed', image, {
+      runtimeUrl: ONNX_RUNTIME_WEB,
+      wasmBase: ONNX_RUNTIME_WASM_BASE,
+      modelPath: HUMAN_PARSING_MODEL,
+    })
+  } catch (detailedError) {
+    console.warn('服の詳細分割を使えないため軽量分割へ戻します', detailedError)
+    const fallback = await runSegmentation('lightweight', image, {
+      visionBundle: MEDIAPIPE_VISION_MODULE.replace('vision_bundle.mjs', 'vision_bundle.js'),
+      wasmBase: MEDIAPIPE_WASM_BASE,
+      modelPath: SELFIE_MULTICLASS_MODEL,
+    })
+    return {
+      ...fallback,
+      detail: 'lightweight',
+      fallbackReason: detailedError?.message ?? String(detailedError),
+    }
+  }
+}
+
+async function runSegmentation(kind, image, options) {
   const bitmap = await createImageBitmap(image)
   const id = ++requestSequence
   return new Promise((resolve, reject) => {
-    requests.set(id, { resolve, reject })
-    const target = segmentationWorker()
+    const state = workerStates[kind]
+    state.requests.set(id, { resolve, reject })
+    const target = segmentationWorker(kind)
     try {
       target.postMessage({
         id,
         image: bitmap,
-        options: {
-          visionBundle: MEDIAPIPE_VISION_MODULE.replace('vision_bundle.mjs', 'vision_bundle.js'),
-          wasmBase: MEDIAPIPE_WASM_BASE,
-          modelPath: SELFIE_MULTICLASS_MODEL,
-        },
+        options,
       }, [bitmap])
     } catch (error) {
-      requests.delete(id)
+      state.requests.delete(id)
       bitmap.close?.()
       reject(error)
     }
   })
 }
 
-function segmentationWorker() {
-  if (worker) return worker
-  worker = new Worker(new URL('./auto-texture-worker.js?v=20260805-14', import.meta.url))
-  worker.addEventListener('message', (event) => {
-    const request = requests.get(event.data.id)
+function segmentationWorker(kind) {
+  const state = workerStates[kind]
+  if (state.worker) return state.worker
+  const file = kind === 'detailed'
+    ? './human-parsing-worker.js?v=20260805-18'
+    : './auto-texture-worker.js?v=20260805-18'
+  state.worker = new Worker(new URL(file, import.meta.url))
+  state.worker.addEventListener('message', (event) => {
+    const request = state.requests.get(event.data.id)
     if (!request) return
-    requests.delete(event.data.id)
+    state.requests.delete(event.data.id)
     if (event.data.ok) {
       request.resolve({
         width: event.data.width,
         height: event.data.height,
         categories: event.data.categories,
         labels: event.data.labels ?? [],
+        kind: event.data.kind ?? kind,
+        model: event.data.model ?? null,
+        detail: kind,
       })
     } else {
       request.reject(new Error(event.data.error))
     }
   })
-  worker.addEventListener('error', (event) => {
+  state.worker.addEventListener('error', (event) => {
     const error = new Error(event.message || 'セグメンテーション処理を開始できませんでした')
-    for (const request of requests.values()) request.reject(error)
-    requests.clear()
-    worker?.terminate()
-    worker = null
+    for (const request of state.requests.values()) request.reject(error)
+    state.requests.clear()
+    state.worker?.terminate()
+    state.worker = null
   })
-  return worker
+  return state.worker
 }
 
 /**
@@ -124,7 +232,8 @@ export function createAutomaticTextureParts(image, segmentation, {
   const pixels = baseCtx.getImageData(0, 0, width, height)
 
   const categoryPlane = scaleCategoryMask(segmentation, width, height)
-  const personBounds = categoryBounds(categoryPlane, width, height)
+  const profile = categoryProfile(segmentation)
+  const personBounds = categoryBounds(categoryPlane, width, height, profile.background)
   if (!personBounds) throw new Error('人物の領域を検出できませんでした')
 
   const anchors = bodyAnchors(poseDetection?.landmarks, personBounds)
@@ -137,36 +246,33 @@ export function createAutomaticTextureParts(image, segmentation, {
     personBounds,
   })
   const facing = resolvedFaceDetection ? 'front' : 'back'
-  // 小物(others)を混ぜると、手や動画UIまで服へ誤転写されやすい。
-  // 上下の服はclothesだけに絞り、靴だけ小物カテゴリも許可する。
-  const clothes = (category) => category === CATEGORY.clothes
-  const footwear = (category) => category === CATEGORY.clothes || category === CATEGORY.other
   const personWidth = personBounds.right - personBounds.left
   const personHeight = personBounds.bottom - personBounds.top
   const xMargin = personWidth * 0.08
-  const pantsTopY = anchors.hipY + personHeight * PANTS_TOP_INSET
+  // 詳細モデルならパンツの画素だけを選べる。腰より下へずらさず、ハイウエスト化を防ぐ。
+  const pantsTopY = anchors.hipY + personHeight * (profile.detailed ? -0.025 : PANTS_TOP_INSET)
   const pantsBottomY = anchors.ankleY - personHeight * PANTS_BOTTOM_INSET
 
   const definitions = {
     hair: (category, x, y) =>
-      category === CATEGORY.hair
+      profile.hair(category)
       && x >= personBounds.left - xMargin
       && x <= personBounds.right + xMargin
       && y <= anchors.shoulderY + personHeight * 0.04,
     shirt: (category, x, y) =>
-      clothes(category)
-      && inTorsoArea(x, anchors, personWidth)
+      profile.top(category)
+      && inTorsoArea(x, anchors, personWidth, profile.detailed ? 0.22 : 0.08)
       && !inArmArea(x, y, anchors, personWidth)
       && y >= anchors.headBottom
       && y <= anchors.hipY + personHeight * 0.035,
     pants: (category, x, y) =>
-      clothes(category)
-      && inLegArea(x, y, anchors, personWidth)
+      profile.bottom(category)
+      && inLowerGarmentArea(x, y, anchors, personWidth, personHeight, profile.detailed)
       && !inArmArea(x, y, anchors, personWidth)
       && y >= pantsTopY
       && y <= pantsBottomY,
     shoes: (category, x, y) =>
-      footwear(category) && inFootArea(x, y, anchors, personWidth, personHeight),
+      profile.shoes(category) && inFootArea(x, y, anchors, personWidth, personHeight),
   }
 
   const parts = {}
@@ -184,7 +290,7 @@ export function createAutomaticTextureParts(image, segmentation, {
       categoryPlane,
       width,
       height,
-      (category, x, y) => clothes(category) && inArmArea(x, y, anchors, personWidth),
+      (category, x, y) => profile.top(category) && inArmArea(x, y, anchors, personWidth),
       sourceWidth,
       sourceHeight,
       { minPartRatio: MIN_PART_RATIO * 0.12 },
@@ -206,8 +312,8 @@ export function createAutomaticTextureParts(image, segmentation, {
         width,
         height,
         (category, x, y) =>
-          clothes(category)
-          && inLegSideArea(x, y, anchors, personWidth, side)
+          profile.bottom(category)
+          && inLegSideArea(x, y, anchors, personWidth, side, profile.detailed)
           && !inArmArea(x, y, anchors, personWidth)
           && y >= pantsTopY
           && y <= pantsBottomY,
@@ -223,14 +329,14 @@ export function createAutomaticTextureParts(image, segmentation, {
         fabricColor,
         32,
         192,
-        legProjectionWindow(anchors, personWidth, personHeight, 'left'),
+        legProjectionWindow(anchors, personWidth, personHeight, 'left', profile.detailed),
       ),
       legRightFront: normalizedRegionTexture(
         sideParts.right?.canvas,
         fabricColor,
         32,
         192,
-        legProjectionWindow(anchors, personWidth, personHeight, 'right'),
+        legProjectionWindow(anchors, personWidth, personHeight, 'right', profile.detailed),
       ),
       legSide: normalizedRegionTexture(null, fabricColor, 32, 64),
       legBack: normalizedRegionTexture(null, fabricColor, 32, 64),
@@ -247,7 +353,7 @@ export function createAutomaticTextureParts(image, segmentation, {
         width,
         height,
         (category, x, y) =>
-          footwear(category)
+          profile.shoes(category)
           && inFootSideArea(x, y, anchors, personWidth, personHeight, side),
         sourceWidth,
         sourceHeight,
@@ -288,7 +394,13 @@ export function createAutomaticTextureParts(image, segmentation, {
     if (face) parts.face = face
   }
 
-  return { facing, parts, personBounds }
+  return {
+    facing,
+    parts,
+    personBounds,
+    segmentationDetail: profile.detailed ? 'detailed' : 'lightweight',
+    garments: profile.detailed ? detectedGarments(categoryPlane) : [],
+  }
 }
 
 function scaleCategoryMask(segmentation, width, height) {
@@ -304,14 +416,14 @@ function scaleCategoryMask(segmentation, width, height) {
   return output
 }
 
-function categoryBounds(categories, width, height) {
+function categoryBounds(categories, width, height, background = CATEGORY.background) {
   let left = width
   let top = height
   let right = -1
   let bottom = -1
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
-      if (categories[y * width + x] === CATEGORY.background) continue
+      if (categories[y * width + x] === background) continue
       left = Math.min(left, x)
       top = Math.min(top, y)
       right = Math.max(right, x)
@@ -458,6 +570,7 @@ function faceDetectionFromMask(segmentation, sourceWidth, sourceHeight, personBo
   const maskHeight = segmentation?.height
   const categories = segmentation?.categories
   if (!maskWidth || !maskHeight || categories?.length < maskWidth * maskHeight) return null
+  const profile = categoryProfile(segmentation)
 
   const personTop = personBounds?.top ?? 0
   const personHeight = (personBounds?.bottom ?? 1) - personTop
@@ -471,7 +584,7 @@ function faceDetectionFromMask(segmentation, sourceWidth, sourceHeight, personBo
     const normalizedY = (y + 0.5) / maskHeight
     if (normalizedY > headLimit) break
     for (let x = 0; x < maskWidth; x += 1) {
-      if (categories[y * maskWidth + x] !== CATEGORY.faceSkin) continue
+      if (!profile.face(categories[y * maskWidth + x])) continue
       count += 1
       left = Math.min(left, x)
       top = Math.min(top, y)
@@ -517,12 +630,12 @@ function clippedBox(x, y, width, height, sourceWidth, sourceHeight) {
   return { originX: left, originY: top, width: right - left, height: bottom - top }
 }
 
-function inTorsoArea(x, anchors, personWidth) {
+function inTorsoArea(x, anchors, personWidth, marginRatio = 0.08) {
   if (!anchors.torsoPoints.length) {
     return x >= anchors.bounds.left && x <= anchors.bounds.right
   }
   const xs = anchors.torsoPoints.map((point) => point.x)
-  const margin = personWidth * 0.08
+  const margin = personWidth * marginRatio
   return x >= Math.min(...xs) - margin && x <= Math.max(...xs) + margin
 }
 
@@ -534,11 +647,21 @@ function inLegArea(x, y, anchors, personWidth) {
   )
 }
 
+/** 詳細モデルでは太いパンツやスカートも、分類済みの下半身として横幅を残す。 */
+function inLowerGarmentArea(x, y, anchors, personWidth, personHeight, detailed) {
+  if (!detailed) return inLegArea(x, y, anchors, personWidth)
+  const margin = personWidth * 0.08
+  return x >= anchors.bounds.left - margin
+    && x <= anchors.bounds.right + margin
+    && y >= anchors.hipY - personHeight * 0.04
+    && y <= anchors.ankleY + personHeight * 0.03
+}
+
 /** 正面写真で、人物自身の左右それぞれに最も近い脚だけを選ぶ。 */
-function inLegSideArea(x, y, anchors, personWidth, side) {
+function inLegSideArea(x, y, anchors, personWidth, side, detailed = false) {
   const target = anchors.legSegmentsBySide[side]
   const other = anchors.legSegmentsBySide[side === 'left' ? 'right' : 'left']
-  const radius = Math.max(personWidth * 0.13, 0.027)
+  const radius = Math.max(personWidth * (detailed ? 0.24 : 0.13), 0.027)
   if (target.length) {
     const distance = segmentSetDistance(x, y, target)
     const otherDistance = other.length ? segmentSetDistance(x, y, other) : Infinity
@@ -605,9 +728,9 @@ function inFootSideArea(x, y, anchors, personWidth, personHeight, side) {
 }
 
 /** 腰から足首までの位置関係を維持した、片脚の正面投影窓。 */
-function legProjectionWindow(anchors, personWidth, personHeight, side) {
+function legProjectionWindow(anchors, personWidth, personHeight, side, detailed = false) {
   const segments = anchors.legSegmentsBySide[side]
-  const radius = Math.max(personWidth * 0.13, 0.027)
+  const radius = Math.max(personWidth * (detailed ? 0.24 : 0.13), 0.027)
   let left
   let right
   if (segments.length) {
@@ -619,7 +742,7 @@ function legProjectionWindow(anchors, personWidth, personHeight, side) {
     left = side === 'left' ? centerX : anchors.bounds.left
     right = side === 'left' ? anchors.bounds.right : centerX
   }
-  const top = anchors.hipY + personHeight * PANTS_TOP_INSET
+  const top = anchors.hipY + personHeight * (detailed ? -0.025 : PANTS_TOP_INSET)
   const bottom = anchors.ankleY - personHeight * PANTS_BOTTOM_INSET
   return clippedWindow(left, top, right, bottom)
 }
@@ -841,6 +964,7 @@ function faceCategoryMask(
   const maskHeight = segmentation?.height
   const categories = segmentation?.categories
   if (!maskWidth || !maskHeight || categories?.length < maskWidth * maskHeight) return output
+  const profile = categoryProfile(segmentation)
 
   const scaleX = width / crop.width
   const scaleY = height / crop.height
@@ -851,9 +975,9 @@ function faceCategoryMask(
       const sourceX = crop.originX + (x + 0.5) / scaleX
       const maskX = Math.min(maskWidth - 1, Math.floor(sourceX * maskWidth / sourceWidth))
       const category = categories[maskY * maskWidth + maskX]
-      if (category === CATEGORY.hair
-        || category === CATEGORY.bodySkin
-        || category === CATEGORY.faceSkin) {
+      if (profile.detailed
+        ? profile.face(category)
+        : profile.hair(category) || profile.face(category)) {
         output[y * width + x] = 1
       }
     }

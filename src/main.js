@@ -3,7 +3,7 @@ import { createAtlas, region, paintSlot, setAtlasScale } from './atlas.js?v=2026
 import { loadBodyList, loadBodySpec, buildBody } from './body.js?v=20260805-16'
 import { decodeImage, detectFace, paintFace, paintFaceCrop, sampleSkinTone, shadeOf } from './face.js?v=20260805-16'
 import { applyPhotoPose, detectPhotoPose } from './photo-pose.js?v=20260805-14'
-import { createAutomaticTextureParts, segmentPerson } from './auto-texture.js?v=20260805-17'
+import { createAutomaticTextureParts, segmentPerson } from './auto-texture.js?v=20260805-18'
 import { openCropper } from './cropper.js'
 import { POSES, applyPose } from './poses.js'
 import { TOPS, BOTTOMS } from './clothing.js?v=20260805-17'
@@ -264,13 +264,15 @@ function renderSources() {
     : '素材画像を選んでから、切り出す部位を選んでください。'
   el.autoTextureApply.disabled = !selected || imageBusy
   el.autoTextureApply.textContent = state.textureBusy
-    ? '人物を分けて貼り付け中…'
+    ? '服を詳細に分けて貼り付け中…'
     : selected?.textureAnalysis
-      ? 'この写真を自動で貼り直す'
-      : 'この写真を自動で貼り付け'
+      ? 'この写真を詳細に貼り直す'
+      : '服を詳細に分けて貼り付け'
   el.autoTextureNote.textContent = selected?.textureAnalysis
-    ? `${selected.textureAnalysis.facing === 'front' ? '正面' : '背面'}写真として、${selected.textureAnalysis.labels.join('・')}へ貼り付け済みです。`
-    : '人物を顔・髪・服・下半身・靴へ分け、対応する場所へまとめて貼ります。'
+    ? selected.textureAnalysis.segmentationDetail === 'detailed'
+      ? `${selected.textureAnalysis.facing === 'front' ? '正面' : '背面'}写真を詳細分割し、${selected.textureAnalysis.garments.join('・') || '服'}を検出して貼り付け済みです。`
+      : `${selected.textureAnalysis.facing === 'front' ? '正面' : '背面'}写真として軽量分割で貼り付け済みです。詳細モデルを読み込めなかったため、腰・足首の位置で服を補っています。`
+    : '服を上着・コート・パンツ・スカート・靴まで分けて貼ります。初回のみ詳細モデルを読み込みます。'
   el.photoPoseApply.disabled = !selected || imageBusy
   el.photoPoseApply.textContent = state.poseBusy
     ? '3D姿勢を読み取り中…'
@@ -596,7 +598,7 @@ async function applyAutomaticTextureFromActiveSource() {
 
   state.textureBusy = true
   renderSources()
-  setStatus('写真の人物を顔・髪・服へ分けています')
+  setStatus('服の詳細分割モデルを準備しています（初回のみ約68MB）')
   try {
     source.segmentation ??= await segmentPerson(source.image)
     if (source.detection === undefined) {
@@ -667,11 +669,16 @@ async function applyAutomaticTextureFromActiveSource() {
       facing: analysis.facing,
       slots: applied.map((item) => item.id),
       labels: applied.map((item) => item.label),
+      garments: analysis.garments,
+      segmentationDetail: analysis.segmentationDetail,
     }
     rebuild({ reframe: true })
     renderSlots()
     const direction = analysis.facing === 'front' ? '正面' : '背面'
-    setStatus(`${direction}写真から${applied.length}部位を自動で貼り付けました`)
+    const detail = analysis.segmentationDetail === 'detailed'
+      ? `服を詳細分割して${applied.length}部位`
+      : `軽量分割で${applied.length}部位`
+    setStatus(`${direction}写真から${detail}へ自動で貼り付けました`)
   } catch (error) {
     console.error(error)
     setStatus(`自動貼り付けに失敗しました: ${error.message}`, 'error')
