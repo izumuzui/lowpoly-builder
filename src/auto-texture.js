@@ -39,6 +39,10 @@ const LANDMARK = {
 
 const MAX_WORK_SIZE = 768
 const MIN_PART_RATIO = 0.0008
+// 腰のランドマークは衣服の境界より上に来ることがある。少し下から始めることで、
+// 長めのTシャツの裾をズボン用の切り抜きへ混ぜない。
+const PANTS_TOP_INSET = 0.055
+const PANTS_BOTTOM_INSET = 0.015
 
 let worker = null
 let requestSequence = 0
@@ -140,6 +144,8 @@ export function createAutomaticTextureParts(image, segmentation, {
   const personWidth = personBounds.right - personBounds.left
   const personHeight = personBounds.bottom - personBounds.top
   const xMargin = personWidth * 0.08
+  const pantsTopY = anchors.hipY + personHeight * PANTS_TOP_INSET
+  const pantsBottomY = anchors.ankleY - personHeight * PANTS_BOTTOM_INSET
 
   const definitions = {
     hair: (category, x, y) =>
@@ -157,8 +163,8 @@ export function createAutomaticTextureParts(image, segmentation, {
       clothes(category)
       && inLegArea(x, y, anchors, personWidth)
       && !inArmArea(x, y, anchors, personWidth)
-      && y >= anchors.hipY - personHeight * 0.025
-      && y <= anchors.ankleY - personHeight * 0.015,
+      && y >= pantsTopY
+      && y <= pantsBottomY,
     shoes: (category, x, y) =>
       footwear(category) && inFootArea(x, y, anchors, personWidth, personHeight),
   }
@@ -203,8 +209,8 @@ export function createAutomaticTextureParts(image, segmentation, {
           clothes(category)
           && inLegSideArea(x, y, anchors, personWidth, side)
           && !inArmArea(x, y, anchors, personWidth)
-          && y >= anchors.hipY - personHeight * 0.025
-          && y <= anchors.ankleY - personHeight * 0.015,
+          && y >= pantsTopY
+          && y <= pantsBottomY,
         sourceWidth,
         sourceHeight,
         { crop: false, minPartRatio: MIN_PART_RATIO * 0.25 },
@@ -613,8 +619,8 @@ function legProjectionWindow(anchors, personWidth, personHeight, side) {
     left = side === 'left' ? centerX : anchors.bounds.left
     right = side === 'left' ? anchors.bounds.right : centerX
   }
-  const top = anchors.hipY - personHeight * 0.025
-  const bottom = anchors.ankleY - personHeight * 0.015
+  const top = anchors.hipY + personHeight * PANTS_TOP_INSET
+  const bottom = anchors.ankleY - personHeight * PANTS_BOTTOM_INSET
   return clippedWindow(left, top, right, bottom)
 }
 

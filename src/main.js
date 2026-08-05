@@ -3,10 +3,10 @@ import { createAtlas, region, paintSlot, setAtlasScale } from './atlas.js?v=2026
 import { loadBodyList, loadBodySpec, buildBody } from './body.js?v=20260805-16'
 import { decodeImage, detectFace, paintFace, paintFaceCrop, sampleSkinTone, shadeOf } from './face.js?v=20260805-16'
 import { applyPhotoPose, detectPhotoPose } from './photo-pose.js?v=20260805-14'
-import { createAutomaticTextureParts, segmentPerson } from './auto-texture.js?v=20260805-16'
+import { createAutomaticTextureParts, segmentPerson } from './auto-texture.js?v=20260805-17'
 import { openCropper } from './cropper.js'
 import { POSES, applyPose } from './poses.js'
-import { TOPS, BOTTOMS } from './clothing.js?v=20260805-15'
+import { TOPS, BOTTOMS } from './clothing.js?v=20260805-16'
 import { applyLook, DEFAULT_LOOK } from './psx.js'
 import { exportGLB, exportPNG, timestamp } from './exporter.js'
 

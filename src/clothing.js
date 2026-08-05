@@ -27,6 +27,9 @@ export const TOPS = [
     id: 'tshirt',
     name: 'Tシャツ',
     override: {
+      // 腰から下はボトムスの領域に渡す。torso のままだとTシャツ写真が骨盤メッシュまで
+      // 描かれ、ズボンの上に裾が垂れ下がって見える。
+      pelvis: { uvSet: 'legs' },
       shoulder: {
         profile: [[0, 0.68, 0.7], [0.28, 1, 1], [0.72, 0.96, 0.96], [1, 0.82, 0.82]],
       },
