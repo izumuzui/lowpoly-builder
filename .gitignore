@@ -1,2 +1,11 @@
 .DS_Store
 *.log
+articles/
+samples/article-*.png
+samples/photo-pose-landmarker.png
+samples/pose-segmentation-regions.png
+samples/pose-segmentation-regions.svg
+samples/photo-texture-body.png
+samples/sleeve-fix.png
+samples/sleeve-fix.svg
+samples/sleeve-fix-anonymized.png
