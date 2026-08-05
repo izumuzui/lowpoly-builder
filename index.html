@@ -53,8 +53,7 @@
           <div class="panel__intro">
             <h1 class="panel__title">Low Poly Creator</h1>
             <p class="panel__lede">
-              画像を貼ってPS1風のキャラクターを作り、Blender用の <code>.glb</code> として書き出します。
-              画像は端末の外に出ません。
+              写真は端末内で処理
             </p>
           </div>
           <button
@@ -76,18 +75,18 @@
             <button class="button source-add" id="source-add" type="button">画像を追加</button>
           </div>
           <ul class="sources" id="source-list" aria-label="素材画像"></ul>
-          <p class="note" id="source-note">1枚でも複数でもまとめて追加できます。</p>
+          <p class="note note--sr" id="source-note">1枚でも複数でもまとめて追加できます。</p>
           <div class="photo-pose">
             <button class="button button--primary" id="auto-texture-apply" type="button" disabled>
               この写真を自動で貼り付け
             </button>
-            <p class="note photo-pose__note" id="auto-texture-note">
+            <p class="note note--sr photo-pose__note" id="auto-texture-note">
               服を上着・コート・パンツ・スカート・靴まで分けて、対応する場所へ貼ります。初回のみ詳細モデルを読み込みます。
             </p>
             <button class="button" id="photo-pose-apply" type="button" disabled>
               選択中の写真からポーズを反映
             </button>
-            <p class="note photo-pose__note" id="photo-pose-note">
+            <p class="note note--sr photo-pose__note" id="photo-pose-note">
               全身が写った写真を選ぶと、端末内のCPUで3D姿勢を読み取れます。
             </p>
           </div>
@@ -95,7 +94,7 @@
 
           <h3 class="group__title slot-heading">貼り付け先</h3>
           <ul class="slots" id="slot-list"></ul>
-          <p class="note" id="slot-note">素材画像を選んでから、切り出す部位を選んでください。</p>
+          <p class="note note--sr" id="slot-note">素材画像を選んでから、切り出す部位を選んでください。</p>
         </section>
 
         <section class="section">
@@ -107,21 +106,23 @@
             </div>
             <div class="group">
               <h3 class="group__title">服（上）</h3>
-              <ul class="chips" id="top-list" role="radiogroup" aria-label="上半身の服"></ul>
+              <ul class="chips chips--rail" id="top-list" role="radiogroup" aria-label="上半身の服"></ul>
             </div>
             <div class="group">
               <h3 class="group__title">服（下）</h3>
-              <ul class="chips" id="bottom-list" role="radiogroup" aria-label="下半身の服"></ul>
+              <ul class="chips chips--rail" id="bottom-list" role="radiogroup" aria-label="下半身の服"></ul>
             </div>
             <div class="group">
               <h3 class="group__title">ポーズ</h3>
-              <ul class="chips" id="pose-list" role="radiogroup" aria-label="ポーズ"></ul>
+              <ul class="chips chips--rail" id="pose-list" role="radiogroup" aria-label="ポーズ"></ul>
             </div>
           </div>
         </section>
 
-        <section class="section">
-          <h2 class="section__title">見た目</h2>
+        <details class="section section--advanced">
+          <summary class="section__summary">
+            <span class="section__title">見た目</span>
+          </summary>
           <div class="section__body">
             <div class="group">
               <h3 class="group__title">背景</h3>
@@ -165,7 +166,7 @@
               </select>
             </label>
           </div>
-        </section>
+        </details>
 
         <section class="section">
           <h2 class="section__title">書き出し</h2>

@@ -1,7 +1,8 @@
-/* Hallmark · pre-emit critique: P5 H5 E5 S4 R5 V4
- * scope: アプリの操作パネル（ページではないため macrostructure / nav / footer は選定なし）
- * tokens: 既存の tokens.css を継承。配色・タイポ・余白は変更していない
+/* Hallmark · macrostructure: Workbench · tone: quiet utility · anchor hue: amber
+ * pre-emit critique: P5 H5 E5 S5 R5 V4
+ * scope: アプリの操作パネル。既存の tokens.css を継承し、配色・タイポは変えない
  * states: default · hover · focus-visible · active · disabled · selected · dragover · empty
+ * audit: contrast pass (40–41) · tokens pass (48) · responsive pass (34, 49–56)
  */
 
 *,
@@ -34,7 +35,7 @@ code {
   color: var(--ink-dim);
 }
 
-:where(a, button, input, select, [tabindex]):focus-visible {
+:where(a, button, input, select, summary, [tabindex]):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -170,6 +171,19 @@ code {
   color: var(--ink-faint);
 }
 
+/* 画面上で重複する説明は読ませず、支援技術にだけ文脈を渡す */
+.note--sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .status {
   margin: 0;
   font-size: var(--text-xs);
@@ -281,12 +295,17 @@ code {
 
 .photo-pose {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-xs);
   margin-top: var(--space-sm);
 }
 
-.photo-pose .button {
-  width: 100%;
+.photo-pose .button--primary {
+  grid-column: 1 / -1;
+}
+
+.photo-pose .button:not(.button--primary) {
+  justify-self: start;
 }
 
 .photo-pose__note {
@@ -452,6 +471,71 @@ code {
   color: var(--ink);
   background: var(--surface-selected);
   border-color: var(--accent-dim);
+}
+
+/* ポーズは一覧ではなく、次の候補へ流し見して選ぶ操作にする */
+.chips--rail {
+  flex-wrap: nowrap;
+  gap: var(--space-xs);
+  margin-right: calc(var(--space-md) * -1);
+  padding: 0 var(--space-md) var(--space-2xs) 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-color: var(--rule) transparent;
+  scroll-padding-inline: var(--space-xs);
+  scroll-snap-type: inline proximity;
+  -webkit-overflow-scrolling: touch;
+}
+
+.chips--rail > li {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+}
+
+.chips--rail .chip {
+  min-height: var(--tap-min);
+}
+
+/* ---------- 折りたたみ ---------- */
+
+.section--advanced {
+  padding-bottom: var(--space-md);
+}
+
+.section__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--tap-min);
+  cursor: pointer;
+  list-style: none;
+}
+
+.section__summary .section__title {
+  margin: 0;
+}
+
+.section__summary::-webkit-details-marker {
+  display: none;
+}
+
+.section__summary::after {
+  width: 7px;
+  height: 7px;
+  margin-right: var(--space-2xs);
+  border-right: 1px solid var(--ink-faint);
+  border-bottom: 1px solid var(--ink-faint);
+  content: '';
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform var(--dur-micro) var(--ease-out);
+}
+
+.section--advanced[open] .section__summary::after {
+  transform: rotate(225deg) translate(-2px, 2px);
+}
+
+.section--advanced[open] .section__summary {
+  margin-bottom: var(--space-sm);
 }
 
 /* ---------- スイッチ・フィールド ---------- */
@@ -689,6 +773,19 @@ code {
   /* 指で操作する画面では選択肢を大きめに */
   .chip {
     min-height: 38px;
+  }
+
+  .chips--rail {
+    margin-right: calc(var(--space-md) * -1);
+    padding-right: var(--space-md);
+  }
+
+  .photo-pose {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .photo-pose .button--primary {
+    grid-column: auto;
   }
 }
 
