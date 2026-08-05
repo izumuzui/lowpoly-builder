@@ -37,6 +37,19 @@ export const TOPS = [
         profile: [[0, 1, 1], [0.28, 1.03, 1.03], [0.72, 0.97, 0.97], [1, 0.84, 0.84]],
       },
     },
+    extras: [
+      {
+        // 骨盤の下地はズボンにし、上側だけをTシャツの裾として重ねる。
+        // これでズボンへ白い裾が混ざらず、Tシャツが腰で短く切れすぎない。
+        from: 'pelvis',
+        id: 'tshirtHem',
+        uvSet: 'torso',
+        uvGroup: 'torso',
+        scale: [1.03, 0.54, 1.03],
+        offsetDelta: [0, 0.03, 0.006],
+        profile: [[0, 0.96, 0.98], [1, 0.98, 0.98]],
+      },
+    ],
   },
   {
     id: 'baggyTshirt',
